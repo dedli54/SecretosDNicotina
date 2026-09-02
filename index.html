@@ -137,24 +137,25 @@ class ParticlesEngine{
  constructor(){ this.pListFirst=null; this.pListLast=null; this.Num_particles=0; this.sortArray=[]; this.matrix={rotX:0,rotY:0}; this.camera={x:0,y:0,z:200, rotationX:0,rotationY:0,rotationZ:0, persp:{focal:CFG.focal}, update(){}, getProjectionMatrix(m){ return m; }}; this.renderLayer={x:W/2,y:H/2,mouseX:0,mouseY:0}; this.zSort=true; this.camera.z=200; }
  addParticle(p){ if(!this.pListFirst){this.pListFirst=p; this.pListLast=p;} else {this.pListLast.next=p; this.pListLast=p;} this.sortArray.push(p); this.Num_particles++; }
  getParticles(){ return this; }
- step(){
-  // _updateVerts + project + sort — simplificado con proyección manual (Utils3D.projectVectors fiel)
-  const rx=this.matrix.rotX*Math.PI/180, ry=this.matrix.rotY*Math.PI/180;
-  const cosX=Math.cos(rx), sinX=Math.sin(rx), cosY=Math.cos(ry), sinY=Math.sin(ry);
-  const focal=CFG.focal, cx=W/2, cy=H/2;
-  let p=this.pListFirst;
-  while(p){
-   let x=p.position.x, y=p.position.y, z=p.position.z;
-   let x1=x*cosY - z*sinY, z1=x*sinY + z*cosY;
-   let y1=y*cosX - z1*sinX, z2=y*sinX + z1*cosX;
-   z2+=this.camera.z;
-   const persp=focal/(focal+z2);
-   p.screen.x=x1*persp+cx; p.screen.y=y1*persp+cy; p.screenZ=persp; p.screen.z=persp;
-   if(z2< -focal+10) p.screenZ=-1;
-   p=p.next;
+  step(){
+   // FIEL: Matrix3D X->Y como CameraControls.as:109 checkMouse matrix rotX=dy*0.4, rotY=dx*0.4
+   const rx=this.matrix.rotX*Math.PI/180, ry=this.matrix.rotY*Math.PI/180;
+   const cosX=Math.cos(rx), sinX=Math.sin(rx), cosY=Math.cos(ry), sinY=Math.sin(ry);
+   const focal=CFG.focal, cx=W/2, cy=H/2;
+   let p=this.pListFirst;
+   while(p){
+    let x=p.position.x, y=p.position.y, z=p.position.z;
+    // orden X luego Y fiel
+    let y1=y*cosX - z*sinX, z1=y*sinX + z*cosX;
+    let x1=x*cosY - z1*sinY, z2=x*sinY + z1*cosY;
+    z2+=this.camera.z;
+    const persp=focal/(focal+z2);
+    p.screen.x=x1*persp+cx; p.screen.y=y1*persp+cy; p.screenZ=persp; p.screen.z=persp;
+    if(z2< -focal+10) p.screenZ=-1;
+    p=p.next;
+   }
+   if(this.zSort) this.sortArray.sort((a,b)=>a.screenZ-b.screenZ);
   }
-  if(this.zSort) this.sortArray.sort((a,b)=>a.screenZ-b.screenZ);
- }
 }
 class PointEngine extends ParticlesEngine{
  constructor(w,h){ super(); this.canvasW=w; this.canvasH=h; this.zSort=false; this.camera.z=200; }
@@ -336,6 +337,7 @@ function onEnterFrame(){
  } else {
   const vol=sampleVoulme();
   effects.getEffect(effects.lastRandom,'position', _currentView.getParticles(), vol);
+  Animations.spring(_currentView.getParticles().pListFirst);
  }
  _currentView.step();
 }
