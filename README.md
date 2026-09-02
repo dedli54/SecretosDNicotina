@@ -1,4 +1,4 @@
-# SaturatedDreams — Wallpaper Engine & Web Recreation
+# Secrets for Nicotine - Wallpaper Engine & Web Recreation
 
 > **Interactive visual recreation in HTML5 / Canvas based on the classic Flash visualizer `SaturatedDreams.swf`.**
 
@@ -27,7 +27,7 @@ This project was made possible thanks to:
 
 * **[nl.barcinski](https://barcinski.nl/)**: Original creator of the visual concept and Flash animation.
 * **Sheryl Chan**: Composer and performer of the original music (*Secrets for Nicotine*), responsible for creating the track.
-* **[JPEXS Free Flash Decompiler (FFDec)](https://github.com/jindrapetrik/jpexs-decompiler/wiki/Installation)**: Essential FOSS tool that allowed decompiling and analyzing the original `SaturatedDreams.swf` file. Through the ActionScript 3 source code (`SaturatedDreams.as`, `ParticlesEngine`, `PointEngine`, `BeatEngine`, `Peak`, `Subband`, `EffectRotator`, `Animations.spring`, etc.), it was possible to extract mathematical formulas, camera parameters, beat detection algorithms, and 3D geometries.
+* **[JPEXS Free Flash Decompiler (FFDec)](https://github.com/jindrapetrik/jpexs-decompiler)**: Essential FOSS tool that allowed decompiling and analyzing the original `SaturatedDreams.swf` file. Through the ActionScript 3 source code (`SaturatedDreams.as`, `ParticlesEngine`, `PointEngine`, `BeatEngine`, `Peak`, `Subband`, `EffectRotator`, `Animations.spring`, etc.), it was possible to extract mathematical formulas, camera parameters, beat detection algorithms, and 3D geometries.
 
 ---
 
@@ -95,5 +95,5 @@ This project was made possible thanks to:
 
 * **Original Flash visual concept and programming**: [nl.barcinski (barcinski.nl)](https://barcinski.nl/)
 * **Original music (Piano)**: Sheryl Chan (*Secrets for Nicotine*)
-* **Decompilation and research**: Conducted using [JPEXS Free Flash Decompiler (FFDec)](https://github.com/jindrapetrik/jpexs-decompiler/wiki/Installation).
+* **Decompilation and research**: Conducted using [JPEXS Free Flash Decompiler (FFDec)](https://github.com/jindrapetrik/jpexs-decompiler).
 * **Port and adaptation to Canvas/Wallpaper Engine**: Recreation for the community.
