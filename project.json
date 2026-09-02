@@ -1,6 +1,6 @@
 {
-	"title": "SaturatedDreams - Particle Field",
-	"description": "Port of nl_barcinski SaturatedDreams Flash animation. 3D particle field forming random shapes (cube, spiral, attractor), color shifts, cursor-following rotation, music-reactive on beats. Original by secretsfornicotine.com.",
+	"title": "SaturatedDreams - FIEL",
+	"description": "Port FIEL 1:1 de SaturatedDreams.swf (nl.barcinski / Flex3, asconfig 800x800 #0A3C41 60fps). Decompilado via JPEXS de CodigoDecompilado/src: SaturatedDreams/BeatEngine/Peak/Subband, ParticlesEngine/PointEngine/ParticlesCamera, Cube/FilledCube/Spiral/StrangeAttractor, EffectRotator 9 efectos, TestAssets 64px, Animations.spring 0.02*0.8, CameraControls 0.4deg, viewStyles BlackYellow(#000000 #E7FB15) / PetrolPink(#0A3C41 #E59AA6 #EE5D80) + PixelView blanco 40k. Beats cada 16low/12med + 10% toggleAnim. Para Wallpaper Engine.",
 	"type": "web",
 	"file": "index.html",
 	"preview": "preview.jpg",

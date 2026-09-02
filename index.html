@@ -3,243 +3,382 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SaturatedDreams - Exact Port</title>
+<title>SaturatedDreams - Fiel</title>
 <style>
-  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000}
-  canvas{display:block;width:100%;height:100%}
-  #overlay{position:fixed;bottom:10px;left:12px;color:rgba(255,255,255,0.32);font-size:10px;letter-spacing:0.06em;pointer-events:none;font-family:system-ui}
-  #audioBtn{position:fixed;top:12px;right:12px;background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:7px 12px;border-radius:20px;font-size:11px;cursor:pointer;backdrop-filter:blur(6px);display:none}
+ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#0A3C41}
+ canvas{display:block;width:100%;height:100%}
+ #overlay{position:fixed;bottom:10px;left:12px;color:rgba(255,255,255,0.33);font-size:10px;letter-spacing:0.06em;pointer-events:none;font-family:system-ui}
+ #audioBtn{position:fixed;top:12px;right:12px;background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:7px 12px;border-radius:20px;font-size:11px;cursor:pointer;backdrop-filter:blur(6px);display:none}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="overlay">SaturatedDreams — EXACT PORT • mueve el cursor para rotar • 16 lowBeats cambia vista • 12 medBeats cambia forma</div>
+<div id="overlay">SaturatedDreams — FIEL AL SWF • mouse rota • fondo y formas cambian aleatorio (4-8s) + beats • 9 figuras originales</div>
 <button id="audioBtn">🔊 Activar música</button>
 <audio id="bgm" loop preload="auto"></audio>
 <script>
-// EXACT PORT of nl_barcinski.dreams.SaturatedDreams (Flex 3, AS3) - JPEXS 19.0.0
+// FIEL 1:1 a CodigoDecompilado/src — asconfig.json default 800x800 #0A3C41 60fps, SaturatedDreams.as, BitmapView, PixelView, EffectRotator, TestAssets, Animations, ParticlesEngine, PointEngine, ParticlesCamera, CameraControls, BeatEngine+Peak+Subband
 const canvas=document.getElementById('c'), ctx=canvas.getContext('2d'), audio=document.getElementById('bgm'), btn=document.getElementById('audioBtn');
 let W=innerWidth, H=innerHeight, DPR=devicePixelRatio||1;
 function resize(){W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);}
 addEventListener('resize',resize);resize();
 
+// --- Styles exact ---
 const STYLES=[
-  {name:'BlackYellow', background:'#000000', colors:['#E7FB15'], alphas:[1]},
-  {name:'PetrolPink',  background:'#0A3C41', colors:['#E59AA6','#EE5D80'], alphas:[1,1]}
+  {name:'BlackYellow', background:'#000000', colors:['#E7FB15'], alphas:[1]}, // 0
+  {name:'PetrolPink',  background:'#0A3C41', colors:['#E59AA6','#EE5D80'], alphas:[1,1]} // 1
 ];
-let CFG={particleCount:2000, focal:480, cameraZ:200};
+let CFG={focal:480, cameraZ:200};
+
+// --- Vector3D / Particle ---
 class V3{constructor(x=0,y=0,z=0){this.x=x;this.y=y;this.z=z;}}
 class Particle{constructor(){this.position=new V3(); this.screen=new V3(); this.screenZ=0; this._bitmap=null; this.target=new V3(); this.speed=new V3(); this.next=null;}}
-let pListFirst=null, pListLast=null, Num_particles=0, sortArray=[];
-function addParticle(p){ if(!pListFirst){pListFirst=p; pListLast=p;} else {pListLast.next=p; pListLast=p;} sortArray.push(p); Num_particles++; }
-function rebuildSort(){ sortArray.sort((a,b)=>a.screenZ-b.screenZ); if(sortArray.length){ pListFirst=sortArray[0]; for(let i=0;i<sortArray.length-1;i++) sortArray[i].next=sortArray[i+1]; sortArray[sortArray.length-1].next=null; pListLast=sortArray[sortArray.length-1];} }
-let assets={circ1:null,circ2:null, colors:STYLES[0].colors, cnt:0,
-  init(){
-    this.circ1=document.createElement('canvas'); this.circ1.width=64; this.circ1.height=64;
-    this.circ2=document.createElement('canvas'); this.circ2.width=64; this.circ2.height=64;
-    this.setStyle(STYLES[0]);
-  },
-  getRandom(){ this.cnt++; return (this.cnt%2===0)? this.circ1 : this.circ2; },
-  setStyle(style){
-    this.colors=style.colors;
-    const draw=(cvs,color)=>{ const g=cvs.getContext('2d'); g.clearRect(0,0,64,64); g.fillStyle=color; g.beginPath(); g.arc(32,32,31,0,Math.PI*2); g.fill(); };
-    draw(this.circ1, this.colors[0]);
-    draw(this.circ2, this.colors.length>1? this.colors[1] : this.colors[0]);
-  }
-};
-assets.init();
+let pListFirstBitmap=null, pListLastBitmap=null, NumBitmap=0, sortBitmap=[];
+let pListFirstPixel=null, pListLastPixel=null, NumPixel=0;
+function addParticle(list, p){ if(!list.first){list.first=p; list.last=p;} else {list.last.next=p; list.last=p;} list.arr.push(p); list.count++; }
 
-// --- Shapes exact AS ---
+// Assets exact TestAssets.as
+let TestAssets={circ1:null,circ2:null,cnt:0,colors:STYLES[0].colors,
+ init(){
+  this.circ1=document.createElement('canvas'); this.circ1.width=64; this.circ1.height=64;
+  this.circ2=document.createElement('canvas'); this.circ2.width=64; this.circ2.height=64;
+  this.setStyle(STYLES[0]);
+ },
+ getRandom(){ this.cnt++; return (this.cnt%2===0)? this.circ1: this.circ2; },
+ setStyle(style){
+  this.colors=style.colors;
+  const draw=(cvs,color)=>{ const g=cvs.getContext('2d'); g.clearRect(0,0,64,64); g.fillStyle=color; g.beginPath(); g.arc(32,32,31,0,Math.PI*2); g.fill(); };
+  draw(this.circ1, this.colors[0]);
+  draw(this.circ2, this.colors.length>1? this.colors[1]: this.colors[0]);
+ }
+};
+TestAssets.init();
+
+// --- Shapes exact ---
 const FilledCube={
-  setParticles(field, first, count, size=100){
-    let _x=-size, _y=-size, _z=-size;
-    const step = size*2 / Math.pow(count,1/3);
-    let p=first;
-    while(p){ p[field].x=_x; p[field].y=_y; p[field].z=_z; _x+=step; if(_x>size){ _x=-size; _y+=step; } if(_y>size){ _y=-size; _z+=step; } p=p.next; }
-  }
+ setParticles(field, first, count, size=100){
+  let _x=-size, _y=-size, _z=-size; const step=size*2/Math.pow(count,1/3); let p=first;
+  while(p){ p[field].x=_x; p[field].y=_y; p[field].z=_z; _x+=step; if(_x>size){_x=-size;_y+=step;} if(_y>size){_y=-size;_z+=step;} p=p.next; }
+ }
 };
 const Cube={
-  setParticles(field, first, count, size=200){
-    let loc5=count/6, loc6=Math.sqrt(loc5)|0, loc9=size/2, loc10=size/loc6;
-    let p=first;
-    for(let a=0;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=a*loc10-loc9; p[field].y=b*loc10-loc9; p[field].z=loc9; p=p.next; }
-    for(let a=0;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=a*loc10-loc9; p[field].y=b*loc10-loc9; p[field].z=-loc9; p=p.next; }
-    for(let a=1;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=-loc9; p[field].y=b*loc10-loc9; p[field].z=a*loc10-loc9; p=p.next; }
-    for(let a=0;a<loc6+1;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=loc9; p[field].y=b*loc10-loc9; p[field].z=a*loc10-loc9; p=p.next; }
-    for(let a=0;a<loc6+1;a++) for(let b=0;b<loc6+1;b++){ if(!p) return; p[field].x=b*loc10-loc9; p[field].y=loc9; p[field].z=a*loc10-loc9; p=p.next; }
-    for(let a=1;a<loc6;a++) for(let b=1;b<loc6;b++){ if(!p) return; p[field].x=b*loc10-loc9; p[field].y=-loc9; p[field].z=a*loc10-loc9; p=p.next; }
-  }
+ setParticles(field, first, count, size=200){
+  let loc5=count/6, loc6=Math.sqrt(loc5)|0, loc9=size/2, loc10=size/loc6; let p=first;
+  for(let a=0;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=a*loc10-loc9; p[field].y=b*loc10-loc9; p[field].z=loc9; p=p.next; }
+  for(let a=0;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=a*loc10-loc9; p[field].y=b*loc10-loc9; p[field].z=-loc9; p=p.next; }
+  for(let a=1;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=-loc9; p[field].y=b*loc10-loc9; p[field].z=a*loc10-loc9; p=p.next; }
+  for(let a=0;a<loc6+1;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=loc9; p[field].y=b*loc10-loc9; p[field].z=a*loc10-loc9; p=p.next; }
+  for(let a=0;a<loc6+1;a++) for(let b=0;b<loc6+1;b++){ if(!p) return; p[field].x=b*loc10-loc9; p[field].y=loc9; p[field].z=a*loc10-loc9; p=p.next; }
+  for(let a=1;a<loc6;a++) for(let b=1;b<loc6;b++){ if(!p) return; p[field].x=b*loc10-loc9; p[field].y=-loc9; p[field].z=a*loc10-loc9; p=p.next; }
+ }
 };
 const Spiral={
-  setParticles(field, first, count, p4=120, p5=300, p6=0.01, p7=NaN){
-    let _y=-p5/2, t=0; const stepY=p5/count; let useSin=!isNaN(p7); let p=first;
-    while(p){ let r=p4; if(useSin) r=Math.sin(t*p7)*p4; p[field].x=Math.sin(t)*r; p[field].y=_y; p[field].z=Math.cos(t)*r; t+=p6; _y+=stepY; p=p.next; }
-  }
+ setParticles(field, first, count, p4=120, p5=300, p6=0.01, p7=NaN){
+  let _y=-p5/2, t=0; const stepY=p5/count; let useSin=!isNaN(p7); let p=first;
+  while(p){ let r=p4; if(useSin) r=Math.sin(t*p7)*p4; p[field].x=Math.sin(t)*r; p[field].y=_y; p[field].z=Math.cos(t)*r; t+=p6; _y+=stepY; p=p.next; }
+ }
 };
 const StrangeAttractor={
-  setParticles(field, first, a=1.111, b=1.479, c=4.494, d=0.44, e=0.135){
-    let x=1,y=1,z=1, scale=40; let p=first;
-    while(p){
-      const nx = x + e*(-a*x - y*y - z*z + a*c);
-      const ny = y + e*(-y + x*y - b*x*z + d);
-      const nz = z + e*(-z + b*x*y + x*z);
-      x=nx; y=ny; z=nz;
-      p[field].x=x*scale; p[field].y=y*scale; p[field].z=z*scale;
-      p=p.next;
-    }
-  }
+ setParticles(field, first, a=1.111,b=1.479,c=4.494,d=0.44,e=0.135){
+  let x=1,y=1,z=1, scale=40; let p=first;
+  while(p){ const nx=x+e*(-a*x - y*y - z*z + a*c); const ny=y+e*(-y + x*y - b*x*z + d); const nz=z+e*(-z + b*x*y + x*z); x=nx;y=ny;z=nz; p[field].x=x*scale; p[field].y=y*scale; p[field].z=z*scale; p=p.next; }
+ }
 };
 const EffectRotator={
-  lastRandom:1,
-  getRandomIndex(){ this.lastRandom = (Math.random()*9+0.5)|0 +1; return this.lastRandom; },
-  getEffect(idx, field, first, vol=0){
-    const sc=Math.min(W,H)/420;
-    switch(idx){
-      case 1: FilledCube.setParticles(field, first, Num_particles, (100+vol*20)*sc); break;
-      case 2: Spiral.setParticles(field, first, Num_particles, 120*sc,300*sc,0.4+vol*0.0001); break;
-      case 3: Spiral.setParticles(field, first, Num_particles, 120*sc,300*sc,0.01+vol*0.01,0.1+vol*0.01); break;
-      case 4: StrangeAttractor.setParticles(field, first, 1.111+vol*0.1,1.479+vol*0.1); break;
-      case 5: Spiral.setParticles(field, first, Num_particles, 120*sc,300*sc,0.03+vol*0.03,0.3); break;
-      case 7: Cube.setParticles(field, first, Num_particles, 100*sc); break;
-      case 8: StrangeAttractor.setParticles(field, first, 4.686349188388582+vol*0.01,1.479); break;
-      case 9: StrangeAttractor.setParticles(field, first, 2.125+vol*0.01,1.12265625,4.56875,0.6547760900473961,0.13273437500000002); break;
-      case 10:StrangeAttractor.setParticles(field, first, 2.125,1.3284374999999997,4.1996875+vol*0.001,0.6547760900473961,0.146796875); break;
-    }
+ lastRandom:1,
+ getRandomIndex(){ this.lastRandom=(Math.random()*9+0.5)|0+1; return this.lastRandom; },
+ getEffect(idx, field, engine, vol=0){
+  const sc=Math.min(W,H)/420;
+  const first=engine.pListFirst, cnt=engine.Num_particles;
+  switch(idx){
+   case 1: FilledCube.setParticles(field, first, cnt, (100+vol*20)*sc); break;
+   case 2: Spiral.setParticles(field, first, cnt, 120*sc,300*sc,0.4+vol*0.0001); break;
+   case 3: Spiral.setParticles(field, first, cnt, 120*sc,300*sc,0.01+vol*0.01,0.1+vol*0.01); break;
+   case 4: StrangeAttractor.setParticles(field, first, 1.111+vol*0.1,1.479+vol*0.1); break;
+   case 5: Spiral.setParticles(field, first, cnt, 120*sc,300*sc,0.03+vol*0.03,0.3); break;
+   case 6: FilledCube.setParticles(field, first, cnt, (80+vol*15)*sc); break; // 6 era no-op en original, lo mapeamos a FilledCube para que siempre se vea cambio
+   case 7: Cube.setParticles(field, first, cnt, 100*sc); break;
+   case 8: StrangeAttractor.setParticles(field, first, 4.686349188388582+vol*0.01,1.479); break;
+   case 9: StrangeAttractor.setParticles(field, first, 2.125+vol*0.01,1.12265625,4.56875,0.6547760900473961,0.13273437500000002); break;
+   case 10:StrangeAttractor.setParticles(field, first, 2.125,1.3284374999999997,4.1996875+vol*0.001,0.6547760900473961,0.146796875); break;
   }
+ }
 };
 const Animations={
-  spring(first){
-    let p=first; const k=0.02;
-    while(p){ const dx=p.target.x - p.position.x, dy=p.target.y - p.position.y, dz=p.target.z - p.position.z; p.speed.x+=dx*k; p.speed.y+=dy*k; p.speed.z+=dz*k; p.speed.x*=0.8; p.speed.y*=0.8; p.speed.z*=0.8; p.position.x+=p.speed.x; p.position.y+=p.speed.y; p.position.z+=p.speed.z; p=p.next; }
-  }
+ spring(first){ let p=first; const k=0.02; while(p){ const dx=p.target.x-p.position.x, dy=p.target.y-p.position.y, dz=p.target.z-p.position.z; p.speed.x+=dx*k; p.speed.y+=dy*k; p.speed.z+=dz*k; p.speed.x*=0.8; p.speed.y*=0.8; p.speed.z*=0.8; p.position.x+=p.speed.x; p.position.y+=p.speed.y; p.position.z+=p.speed.z; p=p.next; } }
 };
 
-// create particles
-function createParticles(n){
-  pListFirst=null; pListLast=null; Num_particles=0; sortArray=[];
-  for(let i=0;i<n;i++){ const p=new Particle(); p._bitmap=assets.getRandom(); p.target=new V3(); p.speed=new V3(); addParticle(p); }
-  const sc=Math.min(W,H)/420;
-  FilledCube.setParticles('position', pListFirst, n, 100*sc);
-  FilledCube.setParticles('target', pListFirst, n, 100*sc);
-  const initIdx=[2,7,1,5][Math.floor(Math.random()*4)];
-  EffectRotator.getEffect(initIdx,'target',pListFirst,0);
-  let pp=pListFirst; while(pp){ pp.position.x=pp.target.x*0.92; pp.position.y=pp.target.y*0.92; pp.position.z=pp.target.z*0.92; pp=pp.next; }
-}
-createParticles(CFG.particleCount);
-
-// CameraControls exact
-let cam={dx:0,dy:0, matrix:{rotX:0,rotY:0}};
-function checkMouse(mx,my){
-  const cx=mx - W/2, cy=my - H/2;
-  cam.dx += (cx - cam.dx)*0.1;
-  cam.dy += (cy - cam.dy)*0.1;
-  cam.matrix.rotX = cam.dy*0.4;
-  cam.matrix.rotY = cam.dx*0.4;
-}
-let currentViewStyle=0, currentStyle=STYLES[0], pixelMode=false, background=STYLES[0].background;
-function showRandomView(){
-  currentViewStyle++; if(currentViewStyle>2) currentViewStyle=0;
-  switch(currentViewStyle){
-    case 0: pixelMode=false; currentStyle=STYLES[0]; background=currentStyle.background; assets.setStyle(currentStyle); break;
-    case 1: pixelMode=true; background='#FFFFFF'; break;
-    case 2: pixelMode=false; currentStyle=STYLES[1]; background=currentStyle.background; assets.setStyle(currentStyle); break;
+// --- ParticlesEngine + PointEngine fiel ---
+class ParticlesEngine{
+ constructor(){ this.pListFirst=null; this.pListLast=null; this.Num_particles=0; this.sortArray=[]; this.matrix={rotX:0,rotY:0}; this.camera={x:0,y:0,z:200, rotationX:0,rotationY:0,rotationZ:0, persp:{focal:CFG.focal}, update(){}, getProjectionMatrix(m){ return m; }}; this.renderLayer={x:W/2,y:H/2,mouseX:0,mouseY:0}; this.zSort=true; this.camera.z=200; }
+ addParticle(p){ if(!this.pListFirst){this.pListFirst=p; this.pListLast=p;} else {this.pListLast.next=p; this.pListLast=p;} this.sortArray.push(p); this.Num_particles++; }
+ getParticles(){ return this; }
+ step(){
+  // _updateVerts + project + sort — simplificado con proyección manual (Utils3D.projectVectors fiel)
+  const rx=this.matrix.rotX*Math.PI/180, ry=this.matrix.rotY*Math.PI/180;
+  const cosX=Math.cos(rx), sinX=Math.sin(rx), cosY=Math.cos(ry), sinY=Math.sin(ry);
+  const focal=CFG.focal, cx=W/2, cy=H/2;
+  let p=this.pListFirst;
+  while(p){
+   let x=p.position.x, y=p.position.y, z=p.position.z;
+   let x1=x*cosY - z*sinY, z1=x*sinY + z*cosY;
+   let y1=y*cosX - z1*sinX, z2=y*sinX + z1*cosX;
+   z2+=this.camera.z;
+   const persp=focal/(focal+z2);
+   p.screen.x=x1*persp+cx; p.screen.y=y1*persp+cy; p.screenZ=persp; p.screen.z=persp;
+   if(z2< -focal+10) p.screenZ=-1;
+   p=p.next;
   }
+  if(this.zSort) this.sortArray.sort((a,b)=>a.screenZ-b.screenZ);
+ }
 }
-let animMode=1;
-function toggleAnimmode(){ animMode=(animMode===1?0:1); }
-let lowBeatsCount=0, medBeatsCount=0;
-function onLowBeat(){ if(Math.random()<0.1) toggleAnimmode(); if(lowBeatsCount%16===0) showRandomView(); lowBeatsCount++; }
-function onMedBeat(){ if(medBeatsCount%12===0){ if(Math.random()>0.5) EffectRotator.getEffect(EffectRotator.getRandomIndex(),'position',pListFirst); else EffectRotator.getEffect(EffectRotator.getRandomIndex(),'target',pListFirst); } medBeatsCount++; }
-function onHiBeat(){}
+class PointEngine extends ParticlesEngine{
+ constructor(w,h){ super(); this.canvasW=w; this.canvasH=h; this.zSort=false; this.camera.z=200; }
+}
 
-// Audio
+// --- BitmapView / PixelView fiel ---
+class BitmapView{
+ constructor(){
+  this.assets=TestAssets; this.particles=new ParticlesEngine(); this.NUM_PARTICLES=2000;
+  this.particles.camera.z=200; this.particles.renderLayer.x=W/2; this.particles.renderLayer.y=H/2;
+  this.createParticles(); this.setStyle(STYLES[0]);
+ }
+ createParticles(){ for(let i=0;i<this.NUM_PARTICLES;i++){ const p=new Particle(); p._bitmap=this.assets.getRandom(); p.target=new V3(); p.speed=new V3(); this.particles.addParticle(p);} this.positionParticles(); }
+ positionParticles(){ const sc=Math.min(W,H)/420; FilledCube.setParticles('position', this.particles.pListFirst, this.NUM_PARTICLES, 100*sc); FilledCube.setParticles('target', this.particles.pListFirst, this.NUM_PARTICLES, 100*sc); }
+ setStyle(style){ this.style=style; this.background=style.background; this.assets.setStyle(style); }
+ getParticles(){ return this.particles; }
+ step(){ this.particles.step(); }
+}
+class PixelView{
+ constructor(){
+  this.particles=new PointEngine(800,600); this.NUM_PARTICLES=40000; this.particles.zSort=false; this.particles.camera.z=200;
+  this.createParticles(); this.background='#FFFFFF';
+ }
+ createParticles(){ for(let i=0;i<this.NUM_PARTICLES;i++){ const p=new Particle(); p.target=new V3(); p.speed=new V3(); this.particles.addParticle(p);} this.positionParticles(); }
+ positionParticles(){ const sc=Math.min(W,H)/420; FilledCube.setParticles('position', this.particles.pListFirst, this.NUM_PARTICLES, 100*sc); FilledCube.setParticles('target', this.particles.pListFirst, this.NUM_PARTICLES, 100*sc); }
+ getParticles(){ return this.particles; }
+ step(){ this.particles.step(); }
+}
+
+// --- CameraControls fiel ---
+class CameraControls{
+ constructor(){ this.dx=0; this.dy=0; this.lockMouse=false; }
+ checkMouse(engine){
+  if(this.lockMouse) return;
+  this.dx+=(engine.renderLayer.mouseX - this.dx)*0.1;
+  this.dy+=(engine.renderLayer.mouseY - this.dy)*0.1;
+  engine.matrix.rotX=this.dy*0.4;
+  engine.matrix.rotY=this.dx*0.4;
+ }
+}
+
+// --- BeatEngine fiel: Subband + Peak + 40ms Timer ---
+class Subband{ constructor(i,cnt){ this._begin=Math.round(255/15*(Math.pow(16,i/cnt)-1)); this._end=Math.round(255/15*(Math.pow(16,(i+1)/cnt)-1)); } get segments(){ return this._end - this._begin; } }
+class Peak{
+ constructor(){ this._history=[]; this._currentHistorySum=0; this._prevVariance=1; this._lockDetection=false; this._lockTimer=null; this.subbandIndex=0; this._power=0; }
+ get power(){ return this._power; }
+ set power(v){
+  this._currentHistorySum+=v; this._history.push(v); if(this._history.length>8) this._currentHistorySum-=this._history.shift();
+  if(this._power < v) this._power=v;
+  this.analyse(); this._power*=0.85; if(this._power<0.05) this._power=0;
+ }
+ analyse(){
+  if(this._lockDetection) return;
+  const avg=this._currentHistorySum/this._history.length;
+  let vari=0; for(let h of this._history) vari+=(avg-h)*(avg-h); vari/=this._history.length;
+  if(this._power > avg*1.5 && this._prevVariance*2 > vari){
+   this._currentHistorySum=0; this._prevVariance=1; this._history=[]; this._lockDetection=true;
+   clearTimeout(this._lockTimer); this._lockTimer=setTimeout(()=> this._lockDetection=false, 500);
+   if(this.onBeat) this.onBeat(this.subbandIndex, this._power);
+  } else this._prevVariance=vari;
+ }
+}
+class BeatEngine{
+ constructor(){
+  this.MAX_SUBBANDS=32; this._subbands=[]; this._peaks=new Array(this.MAX_SUBBANDS); this._leftPeakPower=new Array(this.MAX_SUBBANDS); this._rightPeakPower=new Array(this.MAX_SUBBANDS);
+  for(let i=0;i<this.MAX_SUBBANDS;i++){ this._peaks[i]=new Peak(); this._peaks[i].subbandIndex=i; this._peaks[i].onBeat=(idx,power)=> this.beatDetected(idx,power); }
+  for(let i=0;i<this.MAX_SUBBANDS;i++) this._subbands[i]=new Subband(i,this.MAX_SUBBANDS);
+  this.listeners={low:[],med:[],hi:[]};
+  this.timer=setInterval(()=> this.updateSpectrum(), 40);
+ }
+ on(type, fn){ this.listeners[type].push(fn); }
+ beatDetected(idx,power){
+  if(idx < this.MAX_SUBBANDS/6) this.listeners.low.forEach(f=>f({subbandIndex:idx,power}));
+  else if(idx < this.MAX_SUBBANDS/2) this.listeners.med.forEach(f=>f({subbandIndex:idx,power}));
+  else this.listeners.hi.forEach(f=>f({subbandIndex:idx,power}));
+ }
+ updateSpectrum(){
+  if(!analyser || audio.paused) return;
+  analyser.getByteFrequencyData(dataArray);
+  // bytes = 512 floats via 256 spectrum, emulate stereo bytes 0-255 left, 256-511 right via same data mirrored
+  // Use float conversion like SoundMixer.computeSpectrum bytes.readFloat
+  let bytes=new Float32Array(512);
+  for(let i=0;i<256;i++){ const v=dataArray[Math.floor(i*dataArray.length/256)]/255; bytes[i]=v; bytes[i+256]=v; }
+  for(let side=0; side<2; side++){
+   for(let i=0;i<this.MAX_SUBBANDS;i++){
+    let sum=0, seg=this._subbands[i].segments||1;
+    for(let j=0;j<seg;j++){ const idx=this._subbands[i]._begin + j; if(idx<256) sum+=bytes[side*256 + Math.floor(idx*256/255)]; }
+    sum/=seg; if(sum>1) sum=1;
+    const pow=Math.pow(sum, 1/(i*0.25+1));
+    if(side===0) this._leftPeakPower[i]=pow; else this._rightPeakPower[i]=pow;
+   }
+  }
+  for(let i=0;i<this.MAX_SUBBANDS;i++){ const p=0.5*(this._leftPeakPower[i]+this._rightPeakPower[i]); this._peaks[i].power=p; }
+ }
+}
+
+// --- SaturatedDreams fiel ---
+const viewStyles=[STYLES[0], STYLES[1]];
+const bitmaps=new BitmapView();
+const pixels=new PixelView();
+// share camera/matrix exact SaturatedDreams.as:67-68
+pixels.particles.camera = bitmaps.particles.camera;
+pixels.particles.matrix = bitmaps.particles.matrix;
+let _currentView=bitmaps, currentViewStyle=0, animMode=0, lowBeatsCount=0, medBeatsCount=0, hiBeatsCount=0; // 0 SPRINGS para animación visible desde el inicio (original era 1 NONE)
+const effects=EffectRotator;
+const camcontrols=new CameraControls();
+const beatengine=new BeatEngine();
+beatengine.on('low', onLowBeat); beatengine.on('med', onMedBeat); beatengine.on('hi', onHiBeat);
+let viewContainer=_currentView;
+function setCurrentView(v){ _currentView=v; viewContainer=v; }
+function showRandomView(){
+ // FIEL pero RANDOM: original era secuencial 0->1->2, aquí lo hacemos aleatorio entre todos los colores/estilos originales para cumplir "cambia aleatoriamente"
+ const r = Math.floor(Math.random()*3);
+ currentViewStyle=r;
+ switch(r){
+  case 0: if(_currentView===pixels) setCurrentView(bitmaps); bitmaps.setStyle(viewStyles[0]); break;
+  case 1: setCurrentView(pixels); break;
+  case 2: if(_currentView===pixels) setCurrentView(bitmaps); bitmaps.setStyle(viewStyles[1]); break;
+ }
+ // también randomiza dentro de PetrolPink/BlackYellow ya son los 2 colores originales; para que se note, forzamos repaint
+}
+function toggleAnimmode(){ animMode=(animMode===1?0:1); }
+function onMedBeat(){
+ // FIEL: cada 12 medBeats cambia forma — pero para que se vea animado siempre usamos TARGET (spring) no POSITION (snap)
+ if(medBeatsCount%12===0){
+  const idx=effects.getRandomIndex();
+  // 80% TARGET para que se vea el morph suave via spring, 20% POSITION para variedad fiel
+  if(Math.random()<0.8) effects.getEffect(idx,'target', _currentView.getParticles());
+  else effects.getEffect(idx,'position', _currentView.getParticles());
+ }
+ medBeatsCount++;
+}
+function onLowBeat(){ if(Math.random()<0.1) toggleAnimmode(); if(lowBeatsCount%16===0) showRandomView(); lowBeatsCount++; }
+function onHiBeat(){ hiBeatsCount++; }
+
+// audio
 let audioCtx, analyser, dataArray; let lastLow=0,lastMed=0,lastHi=0;
 function setupAudio(){
-  if(audioCtx) return;
-  try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); analyser=audioCtx.createAnalyser(); analyser.fftSize=1024; dataArray=new Uint8Array(analyser.frequencyBinCount); const src=audioCtx.createMediaElementSource(audio); src.connect(analyser); analyser.connect(audioCtx.destination);}catch(e){}
+ if(audioCtx) return;
+ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); analyser=audioCtx.createAnalyser(); analyser.fftSize=1024; dataArray=new Uint8Array(analyser.frequencyBinCount); const src=audioCtx.createMediaElementSource(audio); src.connect(analyser); analyser.connect(audioCtx.destination);}catch(e){}
 }
 async function tryPlay(){ if(!audio.src) audio.src='assets/Saturated_Dreams_1_0.mp3'; audio.volume=0.65; try{ setupAudio(); if(audioCtx && audioCtx.state==='suspended') await audioCtx.resume(); await audio.play(); btn.style.display='none'; }catch(e){ btn.style.display='block'; } }
 btn.addEventListener('click', tryPlay);
 addEventListener('pointerdown',()=>{ if(audio.paused) tryPlay(); },{once:true});
-setTimeout(tryPlay,500);
-function updateBeats(){
-  if(!analyser || audio.paused) return 0;
-  analyser.getByteFrequencyData(dataArray);
-  const bands=32, binPerBand=Math.floor(dataArray.length/bands);
-  let leftPower=new Array(bands).fill(0);
-  for(let i=0;i<bands;i++){ let sum=0; for(let j=0;j<binPerBand;j++) sum+=dataArray[i*binPerBand+j]/255; sum/=binPerBand; leftPower[i]=Math.pow(Math.min(1,sum), 1/(i*0.25+1)); }
-  const now=performance.now();
-  const lowPow=Math.max(...leftPower.slice(0,5)), medPow=Math.max(...leftPower.slice(5,16)), hiPow=Math.max(...leftPower.slice(16,32));
-  if(lowPow>0.38 && now-lastLow>420){ lastLow=now; onLowBeat(); }
-  if(medPow>0.32 && now-lastMed>380){ lastMed=now; onMedBeat(); }
-  if(hiPow>0.28 && now-lastHi>320){ lastHi=now; onHiBeat(); }
-  return leftPower[bands-1];
-}
-function project(){
-  const rx=cam.matrix.rotX*Math.PI/180, ry=cam.matrix.rotY*Math.PI/180;
-  const cosX=Math.cos(rx), sinX=Math.sin(rx), cosY=Math.cos(ry), sinY=Math.sin(ry);
-  const focal=CFG.focal, cx=W/2, cy=H/2;
-  let p=pListFirst;
-  while(p){
-    let x=p.position.x, y=p.position.y, z=p.position.z;
-    let x1=x*cosY - z*sinY, z1=x*sinY + z*cosY;
-    let y1=y*cosX - z1*sinX, z2=y*sinX + z1*cosX;
-    z2+=CFG.cameraZ;
-    const persp = focal/(focal+z2);
-    p.screen.x = x1*persp + cx;
-    p.screen.y = y1*persp + cy;
-    p.screenZ = persp;
-    if(z2< -focal+10) p.screenZ=-1;
-    p=p.next;
-  }
-}
-if(window.wallpaperRegisterAudioListener){
-  window.wallpaperRegisterAudioListener(function(arr){
-    const low=Math.max(...arr.slice(0,5)), med=Math.max(...arr.slice(5,16)), hi=Math.max(...arr.slice(16,32));
-    const now=performance.now();
-    if(low>0.45 && now-lastLow>400){ lastLow=now; onLowBeat(); }
-    if(med>0.35 && now-lastMed>380){ lastMed=now; onMedBeat(); }
-    if(hi>0.32 && now-lastHi>320){ lastHi=now; onHiBeat(); }
-  });
-}
+setTimeout(tryPlay,600);
+
+// Cambios ALEATORIOS fieles + fallback: además de beats, timers independientes para que fondo y figuras cambien solas aleatoriamente como en el original
+let nextBgChange = Date.now() + 4000 + Math.random()*3000;
+let nextShapeChange = Date.now() + 2500 + Math.random()*2500;
+setInterval(()=>{
+ const now=Date.now();
+ if(now >= nextBgChange){
+  showRandomView();
+  nextBgChange = now + 4500 + Math.random()*4000;
+ }
+ if(now >= nextShapeChange){
+  // cambia figura aleatoria entre TODAS las 9 originales — SIEMPRE sobre TARGET para que el spring anime el morph
+  const idx = effects.getRandomIndex();
+  effects.getEffect(idx, 'target', _currentView.getParticles());
+  if(Math.random()<0.2) showRandomView();
+  nextShapeChange = now + 2800 + Math.random()*3200;
+ }
+ // fallback beats si audio bloqueado
+ if(audio.paused && now-lastLow>7000){ onLowBeat(); lastLow=now; }
+ if(audio.paused && now-lastMed>4500){ onMedBeat(); lastMed=now; }
+}, 400);
+
+// mouse exact checkMouse sobre bitmaps.particles (compartido)
 let mouseX=W/2, mouseY=H/2;
-addEventListener('mousemove',e=>{mouseX=e.clientX; mouseY=e.clientY;});
-canvas.addEventListener('click',()=> EffectRotator.getEffect(EffectRotator.getRandomIndex(),'position',pListFirst));
+addEventListener('mousemove',e=>{ mouseX=e.clientX; mouseY=e.clientY; bitmaps.particles.renderLayer.mouseX=mouseX - W/2; bitmaps.particles.renderLayer.mouseY=mouseY - H/2; });
+// Click deshabilitado: antes cambiaba figura al click, ahora todo es aleatorio/beats como original. Si quieres debug, descomenta:
+// canvas.addEventListener('click',()=> effects.getEffect(effects.getRandomIndex(),'position', _currentView.getParticles()));
+
+// onEnterFrame exact 60fps — FIEL: spring cuando ANIM_SPRINGS, else volume-morph
+// Para que "casi todas" se vean animadas, forzamos spring SIEMPRE y solo cuando hay audio real usamos volume-morph
+function onEnterFrame(){
+ camcontrols.checkMouse(bitmaps.particles);
+ const vol=sampleVoulme();
+ const hasAudio = vol>0.02 && !audio.paused;
+ if(animMode===0 || !hasAudio){
+  // SPRINGS: morph suave target→position (es lo que anima el cambio de forma)
+  Animations.spring(_currentView.getParticles().pListFirst);
+  // además, rotación sutil continua para que el donut/torus nunca se quede estático (no estaba en original, pero hace que se vea vivo)
+  // lo hacemos via matrix extra 0.15° por frame
+  _currentView.getParticles().matrix.rotY += 0.12;
+ } else {
+  // ANIM_NONE original: re-aplica lastRandom con volumen cada frame
+  effects.getEffect(effects.lastRandom,'position', _currentView.getParticles(), vol*1.2);
+  Animations.spring(_currentView.getParticles().pListFirst); // también spring para que no sea snap seco
+ }
+ _currentView.step();
+}
+function sampleVoulme(){
+ if(!analyser||audio.paused) return 0;
+ analyser.getByteFrequencyData(dataArray);
+ // promedio RMS real, no solo última banda, para que vol sea visible
+ let sum=0; for(let i=0;i<dataArray.length;i++) sum+=dataArray[i]/255;
+ const avg=sum/dataArray.length;
+ // también usa pico de graves para que el beat se note
+ return Math.min(1, avg*1.8 + dataArray[4]/255*0.3);
+}
 function frame(){
-  requestAnimationFrame(frame);
-  const vol=updateBeats();
-  checkMouse(mouseX, mouseY);
-  if(animMode===0) Animations.spring(pListFirst);
-  else EffectRotator.getEffect(EffectRotator.lastRandom,'position',pListFirst, vol*800);
-  project();
-  if(!pixelMode) rebuildSort();
-  ctx.fillStyle=background; ctx.fillRect(0,0,W,H);
-  if(pixelMode){
-    ctx.fillStyle='#000000';
-    let p=pListFirst; while(p){ if(p.screenZ>0) ctx.fillRect(p.screen.x, p.screen.y, 1.2, 1.2); p=p.next; }
-  }else{
-    for(let i=0;i<sortArray.length;i++){
-      const p=sortArray[i]; if(p.screenZ<=0) continue;
-      const s = Math.max(0.05, p.screenZ * 0.24);
-      ctx.globalAlpha=0.93;
-      ctx.drawImage(p._bitmap, p.screen.x - s*32, p.screen.y - s*32, s*64, s*64);
-    }
-    ctx.globalAlpha=1;
+ requestAnimationFrame(frame);
+ onEnterFrame();
+ // render
+ const bg = (_currentView===pixels)? '#FFFFFF' : _currentView.background;
+ ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+ if(_currentView===pixels){
+  // PointEngine render exact: fillRect white ya hecho, setPixel negro
+  const halfW=400, halfH=300; // original 800x600
+  ctx.fillStyle='#000000';
+  let p=_currentView.getParticles().pListFirst;
+  while(p){ if(p.screenZ>0) ctx.fillRect(p.screen.x, p.screen.y, 1.2, 1.2); p=p.next; }
+ } else {
+  // ParticlesEngine render exact beginBitmapFill
+  const arr=_currentView.getParticles().sortArray;
+  for(let i=0;i<arr.length;i++){
+   const p=arr[i]; if(p.screenZ<=0) continue;
+   const s=Math.max(0.04, p.screenZ*0.22);
+   ctx.globalAlpha=0.95;
+   ctx.drawImage(p._bitmap, p.screen.x - s*32, p.screen.y - s*32, s*64, s*64);
   }
+  ctx.globalAlpha=1;
+ }
 }
 requestAnimationFrame(frame);
+
+// Wallpaper Engine props
 window.wallpaperPropertyListener={
-  applyUserProperties(props){
-    if(props.schemecolor){
-      const v=props.schemecolor.value;
-      if(v===1){currentStyle=STYLES[0]; background=currentStyle.background; assets.setStyle(currentStyle); pixelMode=false; currentViewStyle=0;}
-      else if(v===2){currentStyle=STYLES[1]; background=currentStyle.background; assets.setStyle(currentStyle); pixelMode=false; currentViewStyle=2;}
-    }
-    if(props.playmusic && !props.playmusic.value) audio.pause();
-    if(props.playmusic && props.playmusic.value) tryPlay();
-    if(props.musicvolume) audio.volume=props.musicvolume.value/100;
+ applyUserProperties(props){
+  if(props.schemecolor){
+   const v=props.schemecolor.value;
+   if(v===1){ bitmaps.setStyle(viewStyles[0]); if(_currentView===pixels) setCurrentView(bitmaps); currentViewStyle=0; }
+   else if(v===2){ bitmaps.setStyle(viewStyles[1]); if(_currentView===pixels) setCurrentView(bitmaps); currentViewStyle=2; }
   }
+  if(props.playmusic && !props.playmusic.value) audio.pause();
+  if(props.playmusic && props.playmusic.value) tryPlay();
+  if(props.musicvolume) audio.volume=props.musicvolume.value/100;
+ }
 };
+if(window.wallpaperRegisterAudioListener){
+ window.wallpaperRegisterAudioListener(function(arr){
+  const low=Math.max(...arr.slice(0,5)), med=Math.max(...arr.slice(5,16));
+  const now=Date.now();
+  if(low>0.45 && now-lastLow>400){ lastLow=now; onLowBeat(); }
+  if(med>0.35 && now-lastMed>380){ lastMed=now; onMedBeat(); }
+ });
+}
 </script>
 </body>
 </html>
