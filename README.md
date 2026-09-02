@@ -1,38 +1,99 @@
-# SaturatedDreams — Wallpaper Engine (FIEL)
+# SaturatedDreams — Wallpaper Engine & Web Recreation
 
-Port 1:1 de `SaturatedDreams.swf` a HTML/Canvas para Wallpaper Engine. Incluye todas las figuras y animaciones del SWF.
+> **Interactive visual recreation in HTML5 / Canvas based on the classic Flash visualizer `SaturatedDreams.swf`.**
 
-## Figuras (12)
-- Originales: `FilledCube 100, Cube 100, Spiral 120,300 0.4 | 0.01,0.1 | 0.03,0.3, StrangeAttractor 1.111/1.479, 4.68/1.479, 2.12/1.12/4.56, 2.12/1.32/4.19` (`EffectRotator 1-5,7-10`)
-- Añadidas por pedido: `Cylinder 110×300` y `Torus 110×38` de puntitos (`6,11,12`)
+![Preview](preview.jpg)
 
-Todas con `sc=Math.min(W,H)/420` (800→420) para cubrir pantalla como captura `Flash Player 32` blanca.
+---
 
-## Colores
-`BlackYellow` `#000000 #E7FB15` y `PetrolPink` `#0A3C41 [#E59AA6,#EE5D80]` + `PixelView` blanco 40k. Cambio cada `16 lowBeats` aleatorio.
+## 📖 Project Overview
 
-## Animaciones
-- **Fluida:** `Animations.spring` `0.02*0.8` morph `target→position`
-- **Errática:** `POSITION` snap + impulso `±12` (40% de los cambios)
-- `onEnterFrame` `SaturatedDreams.as:205` `checkMouse 0.4°` `FOV80` `persp 480/(480+z)` `zSort`
-- Reacciona a **audio de la computadora** vía `wallpaperRegisterAudioListener` (`audioPower` pulsa tamaño `1+0.55`)
+**SaturatedDreams** is an interactive, audio-reactive 3D particle visualizer and live wallpaper adapted for **Wallpaper Engine** and modern web browsers using **HTML5 Canvas** and **JavaScript**.
 
-## Controles
-- Mueve mouse → rota nube (compartido Bitmap/Pixel)
-- Cambios automáticos 3-6s forma / 4-8s fondo + beats `12 med / 16 low`
+The original project was developed in Flash / Flex (ActionScript 3) by **[nl.barcinski](https://barcinski.nl/)**. This version attempts to port the experience I spent hours watching as a kid to open web technologies, bringing back that feeling of being a kid with nothing to do but watch and play Flash stuff.
 
-## Archivos
+---
+
+## ⚠️ Note on Port Fidelity
+
+> [!NOTE]
+> **This is not a 1:1 identical recreation**, but it was developed to be **as faithful and close as possible** to the original (basically skill issue).
+
+---
+
+## 🛠️ Acknowledgements & Decompilation
+
+This project was made possible thanks to:
+
+* **[nl.barcinski](https://barcinski.nl/)**: Original creator of the visual concept and Flash animation.
+* **Sheryl Chan**: Composer and performer of the original music (*Secrets for Nicotine*), responsible for creating the track.
+* **[JPEXS Free Flash Decompiler (FFDec)](https://github.com/jindrapetrik/jpexs-decompiler/wiki/Installation)**: Essential FOSS tool that allowed decompiling and analyzing the original `SaturatedDreams.swf` file. Through the ActionScript 3 source code (`SaturatedDreams.as`, `ParticlesEngine`, `PointEngine`, `BeatEngine`, `Peak`, `Subband`, `EffectRotator`, `Animations.spring`, etc.), it was possible to extract mathematical formulas, camera parameters, beat detection algorithms, and 3D geometries.
+
+---
+
+## ✨ Key Features
+
+### 🌀 3D Geometries & Shapes
+* **Shapes:**
+  * `FilledCube` (Solid cube with a 3D distribution on a regular grid).
+  * `Cube` (Hollow cube across exterior faces).
+  * `Spiral` (Spirals with various frequencies and harmonic sinusoidal modulations).
+  * `StrangeAttractor` (Chaotic 3D attractors based on non-linear dynamic systems).
+  * `Cylinder` (Particle cylinder).
+  * `Torus` (Particle torus).
+
+### 🎨 Color Schemes & Views
+* **`BlackYellow`**: Deep black background (`#000000`) with vibrant yellow particles (`#E7FB15`).
+* **`PetrolPink`**: Dark petrol background (`#0A3C41`) with pinkish-toned particles (`#E59AA6`, `#EE5D80`).
+* **`PixelView`**: High-density monochrome view with up to 40,000 black micro-points on a pure white background (`#FFFFFF`).
+
+### ⚡ Physics & Dynamics
+* **Fluid Mode (`Animations.spring`):** Spring physics system with tension and damping coefficients that smoothly interpolates each particle's position toward the new target shape (`target`).
+* **Erratic Transitions:** Direct position snaps with random velocity impulses to create sharp, energetic shifts in sync with the beat.
+* **3D Projection:** Camera with focal distance (`focal: 480`), relative depth, and depth sorting along the Z-axis (`zSort`).
+* **Interactive Camera:** Smooth scene rotation controlled by mouse/cursor movement.
+
+### 🎵 Audio Reactivity
+* **Integrated BeatEngine:** Emulation of the 32 sub-band spectrum analysis system with peak detection (lows, mids, and highs).
+* **Local Audio:** Includes the original music track *Secrets for Nicotine* (`assets/Saturated_Dreams_1_0.mp3`), composed and performed on piano by **Sheryl Chan**.
+* **System Audio (Wallpaper Engine):** Native integration with `wallpaperRegisterAudioListener`, allowing particles and shapes to pulse to the rhythm of any audio playing on your PC (Spotify, YouTube, games, etc.).
+
+---
+
+## 📁 Repository Structure
+
+```text
+├── assets/
+│   ├── Saturated_Dreams_1_0.mp3  # Original looping music track
+│   └── SaturatedDreams.swf       # Original Flash SWF file
+├── index.html                    # Main HTML5/Canvas application
+├── project.json                  # Wallpaper Engine manifest & properties
+├── preview.jpg                   # Preview image
+├── ruffle.html                   # Original SWF player via Ruffle
+└── README.md                     # Project documentation
 ```
-project.json  # Web 60fps
-index.html    # Port fiel
-ruffle.html   # SWF original (Ruffle)
-preview.jpg   # 1920×1080
-assets/       # mp3 + swf
-```
 
-## Publicar
-Wallpaper Engine → Crear → Abrir desde archivo → `project.json` → Publicar en Workshop. Para audio del sistema activa `Usar audio del wallpaper` en propiedades y en Wallpaper Engine `Ajustes → Audio`.
+---
 
-## Audio
-`assets/Saturated_Dreams_1_0.mp3` loop 0.65 vol. Si no suena en navegador click `🔊`.
+## ⚙️ Configurable Properties (Wallpaper Engine)
 
+| Property | Type | Description |
+| :--- | :--- | :--- |
+| `schemecolor` | Combo | Color scheme selection (Auto-Random, Petrol Pink, Black Yellow, etc.) |
+| `particlecount` | Slider | Number of particles on screen (800 – 6000) |
+| `particlesize` | Slider | Render size of each particle |
+| `rotationspeed` | Slider | Rotation sensitivity when moving the mouse |
+| `shapetime` | Slider | Time interval between geometric shape changes |
+| `playmusic` | Bool | Play or pause the built-in background music |
+| `musicvolume` | Slider | Volume level of the built-in music track |
+| `beatreactive` | Bool | Enable automatic beat-driven shape transformations |
+| `usemicrophone` | Bool | Use the Wallpaper Engine system audio listener |
+
+---
+
+## 📄 License & Credits
+
+* **Original Flash visual concept and programming**: [nl.barcinski (barcinski.nl)](https://barcinski.nl/)
+* **Original music (Piano)**: Sheryl Chan (*Secrets for Nicotine*)
+* **Decompilation and research**: Conducted using [JPEXS Free Flash Decompiler (FFDec)](https://github.com/jindrapetrik/jpexs-decompiler/wiki/Installation).
+* **Port and adaptation to Canvas/Wallpaper Engine**: Recreation for the community.
