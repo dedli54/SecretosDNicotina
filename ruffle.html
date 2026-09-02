@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SaturatedDreams - Ruffle (Faithful Flash)</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden} #wrap{width:100%;height:100%;display:flex;align-items:center;justify-content:center} ruffle-player,object{width:100%;height:100%}</style>
+<script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
+</head>
+<body>
+<div id="wrap"></div>
+<audio id="bgm" src="assets/Saturated_Dreams_1_0.mp3" loop autoplay></audio>
+<script>
+window.RufflePlayer = window.RufflePlayer || {};
+window.addEventListener("DOMContentLoaded", () => {
+  const ruffle = window.RufflePlayer.newest();
+  const player = ruffle.createPlayer();
+  player.style.width="100%"; player.style.height="100%";
+  document.getElementById("wrap").appendChild(player);
+  player.load("assets/SaturatedDreams.swf").then(()=>{ player.play(); }).catch(e=>console.error(e));
+});
+// Wallpaper Engine properties: still allow volume control
+window.wallpaperPropertyListener = {
+  applyUserProperties: function(p){
+    if(p.musicvolume) document.getElementById('bgm').volume = p.musicvolume.value/100;
+    if(p.playmusic){ const a=document.getElementById('bgm'); if(p.playmusic.value) a.play().catch(()=>{}); else a.pause(); }
+  }
+};
+</script>
+</body>
+</html>

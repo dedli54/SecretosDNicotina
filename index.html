@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaturatedDreams - Wallpaper Engine</title>
+<style>
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#0a1a22;font-family:system-ui,sans-serif}
+  canvas{display:block;width:100%;height:100%}
+  #overlay{position:fixed;bottom:12px;left:12px;color:rgba(255,255,255,0.35);font-size:10px;letter-spacing:0.08em;pointer-events:none;text-shadow:0 1px 4px rgba(0,0,0,0.6)}
+  #audioToggle{position:fixed;top:12px;right:12px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:6px 10px;border-radius:20px;font-size:11px;cursor:pointer;backdrop-filter:blur(6px);display:none}
+  #audioToggle:hover{background:rgba(255,255,255,0.12)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="overlay">SaturatedDreams — move cursor to rotate • click to change shape • double-click to change palette</div>
+<button id="audioToggle">🔊 Enable music</button>
+<audio id="bgm" loop preload="auto" crossorigin="anonymous"></audio>
+<script>
+// SaturatedDreams port - replicates Flash ParticlesEngine + BeatEngine behavior
+// Original: nl_barcinski.dreams.SaturatedDreams (Flex 3, AS3)
+// Features: random shapes/forms, background+dot color shifts, cursor-following rotation, beat reactive
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const audio = document.getElementById('bgm');
+const btn = document.getElementById('audioToggle');
+
+let W=0,H=0,DPR=window.devicePixelRatio||1;
+function resize(){
+  W=window.innerWidth; H=window.innerHeight;
+  canvas.width=W*DPR; canvas.height=H*DPR;
+  canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize',resize); resize();
+
+// --- Config (Wallpaper Engine properties will override) ---
+let CFG = {
+  particleCount: 2500,
+  particleSize: 2.2,
+  rotationSpeed: 1.0,
+  shapeTime: 6,
+  scheme: 0, // 0 auto
+  playMusic: true,
+  musicVolume: 60,
+  beatReactive: true,
+  useMicrophone: false
+};
+
+// palettes matching original styles: PetrolPink, BlackYellow + extras
+const PALETTES = [
+  { name:'PetrolPink', bg:'#0a2a33', bg2:'#1a4a52', dot:'#ff6b9d', dot2:'#4ecdc4', glow:'#ff8fab' },
+  { name:'BlackYellow', bg:'#080808', bg2:'#1a1a00', dot:'#ffdd00', dot2:'#ff8800', glow:'#ffee66' },
+  { name:'MidnightNeon', bg:'#020617', bg2:'#0f172a', dot:'#38bdf8', dot2:'#a78bfa', glow:'#67e8f9' },
+  { name:'DeepDream', bg:'#1a0a2e', bg2:'#2d0b4a', dot:'#ff2a6d', dot2:'#05d9e8', glow:'#ff6b9d' },
+  { name:'Sunset', bg:'#1a0a0a', bg2:'#3a1a1a', dot:'#ff6b35', dot2:'#f7c59f', glow:'#ff8c61' },
+  { name:'Forest', bg:'#0a1a0f', bg2:'#143d1f', dot:'#7ae582', dot2:'#caffbf', glow:'#a7ff83' }
+];
+let paletteIdx = 0;
+let palette = PALETTES[0];
+let targetPalette = PALETTES[0];
+let paletteLerp = 1;
+
+function pickPalette(forcedIdx){
+  if(forcedIdx!==undefined){ paletteIdx=forcedIdx; targetPalette=PALETTES[forcedIdx % PALETTES.length]; paletteLerp=0; return; }
+  if(CFG.scheme!==0){ let idx=CFG.scheme-1; targetPalette=PALETTES[idx]; paletteIdx=idx; paletteLerp=0; return; }
+  let n; do{ n=Math.floor(Math.random()*PALETTES.length);}while(n===paletteIdx);
+  paletteIdx=n; targetPalette=PALETTES[n]; paletteLerp=0;
+}
+pickPalette(0);
+
+function lerpColor(a,b,t){
+  const ah=parseInt(a.slice(1),16), bh=parseInt(b.slice(1),16);
+  const ar=(ah>>16)&255, ag=(ah>>8)&255, ab=ah&255;
+  const br=(bh>>16)&255, bg=(bh>>8)&255, bb=bh&255;
+  const nr=Math.round(ar+(br-ar)*t), ng=Math.round(ag+(bg-ag)*t), nb=Math.round(ab+(bb-ab)*t);
+  return `rgb(${nr},${ng},${nb})`;
+}
+let bgColor = palette.bg;
+
+// --- Shape generators (matching AS3 shapes: Cube, FilledCube, Spiral, StrangeAttractor) ---
+const SHAPES = ['cube','filledCube','sphere','spiral','torus','attractor','wave','cubeWire'];
+let lastShape='';
+
+function randomShapeInto(arr){
+  let s;
+  do{ s=SHAPES[Math.floor(Math.random()*SHAPES.length)]; }while(s===lastShape);
+  lastShape=s;
+  genShape(s, arr);
+}
+
+// --- Particles ---
+let particles = [];
+let shapeA = [], shapeB = [];
+let morphT = 1; // 0->1 morph between A and B
+let shapeHold = 0;
+let autoShapeTimer=0;
+
+function initParticles(n){
+  particles = new Array(n);
+  shapeA = new Array(n);
+  shapeB = new Array(n);
+  for(let i=0;i<n;i++){
+    particles[i]={x:0,y:0,z:0, tx:0,ty:0,tz:0, ox:0,oy:0,oz:0, r: Math.random()*Math.PI*2};
+    shapeA[i]={x:0,y:0,z:0};
+    shapeB[i]={x:0,y:0,z:0};
+  }
+  randomShapeInto(shapeA);
+  randomShapeInto(shapeB);
+  for(let i=0;i<n;i++){ particles[i].x=shapeA[i].x; particles[i].y=shapeA[i].y; particles[i].z=shapeA[i].z; }
+  morphT=1;
+}
+
+function genShape(name, arr){
+  const n=arr.length;
+  const scale = Math.min(W,H)*0.32;
+  if(name==='cube'){
+    // surface of cube
+    for(let i=0;i<n;i++){
+      let face=Math.floor(Math.random()*6);
+      let a=(Math.random()-0.5)*2, b=(Math.random()-0.5)*2;
+      let x=0,y=0,z=0;
+      if(face===0){x=1; y=a; z=b;}
+      else if(face===1){x=-1; y=a; z=b;}
+      else if(face===2){y=1; x=a; z=b;}
+      else if(face===3){y=-1; x=a; z=b;}
+      else if(face===4){z=1; x=a; y=b;}
+      else {z=-1; x=a; y=b;}
+      arr[i].x=x*scale; arr[i].y=y*scale; arr[i].z=z*scale;
+    }
+  } else if(name==='filledCube'){
+    for(let i=0;i<n;i++){
+      arr[i].x=(Math.random()-0.5)*2*scale;
+      arr[i].y=(Math.random()-0.5)*2*scale;
+      arr[i].z=(Math.random()-0.5)*2*scale;
+    }
+  } else if(name==='sphere'){
+    for(let i=0;i<n;i++){
+      const u=Math.random(), v=Math.random();
+      const theta=2*Math.PI*u, phi=Math.acos(2*v-1);
+      const r=scale*(0.9+Math.random()*0.15);
+      arr[i].x=r*Math.sin(phi)*Math.cos(theta);
+      arr[i].y=r*Math.sin(phi)*Math.sin(theta);
+      arr[i].z=r*Math.cos(phi);
+    }
+  } else if(name==='spiral'){
+    // multi-arm spiral (as in original Spiral shape)
+    const arms=3;
+    for(let i=0;i<n;i++){
+      const arm=Math.floor(Math.random()*arms);
+      const t=Math.random()*Math.PI*4;
+      const rad=(t/Math.PI/4)*scale*0.55 + Math.random()*12;
+      const ang=t + arm*(Math.PI*2/arms);
+      const y=(Math.random()-0.5)*scale*0.45 + Math.sin(t*2)*20;
+      arr[i].x=Math.cos(ang)*rad;
+      arr[i].z=Math.sin(ang)*rad;
+      arr[i].y=y;
+    }
+  } else if(name==='torus'){
+    const R=scale*0.65, r=scale*0.28;
+    for(let i=0;i<n;i++){
+      const u=Math.random()*Math.PI*2, v=Math.random()*Math.PI*2;
+      arr[i].x=(R+r*Math.cos(v))*Math.cos(u);
+      arr[i].y=r*Math.sin(v);
+      arr[i].z=(R+r*Math.cos(v))*Math.sin(u);
+    }
+  } else if(name==='attractor'){
+    // StrangeAttractor - Lorenz
+    let x=0.1,y=0,z=0;
+    const sigma=10, rho=28, beta=8/3;
+    const dt=0.005;
+    // warmup
+    for(let k=0;k<2000;k++){ const dx=sigma*(y-x), dy=x*(rho-z)-y, dz=x*y-beta*z; x+=dx*dt; y+=dy*dt; z+=dz*dt; }
+    for(let i=0;i<n;i++){
+      for(let s=0;s<6;s++){ const dx=sigma*(y-x), dy=x*(rho-z)-y, dz=x*y-beta*z; x+=dx*dt; y+=dy*dt; z+=dz*dt; }
+      arr[i].x=x*8; arr[i].y=z*8 - scale*0.2; arr[i].z=y*8;
+      // scale to fit
+      const m=1.1; arr[i].x*=scale/180*m; arr[i].y*=scale/260*m; arr[i].z*=scale/180*m;
+    }
+  } else if(name==='wave'){
+    for(let i=0;i<n;i++){
+      const x=(Math.random()-0.5)*2*scale;
+      const z=(Math.random()-0.5)*2*scale;
+      const d=Math.sqrt(x*x+z*z);
+      const y=Math.sin(d*0.015)*80 + Math.cos(x*0.02)*30;
+      arr[i].x=x; arr[i].z=z; arr[i].y=y;
+    }
+  } else if(name==='cubeWire'){
+    // edges only
+    for(let i=0;i<n;i++){
+      const edge=Math.floor(Math.random()*12);
+      const t=Math.random();
+      let x,y,z;
+      const s=scale;
+      // 12 edges of cube
+      const edges=[
+        [[-s,-s,-s],[ s,-s,-s]], [[-s, s,-s],[ s, s,-s]], [[-s,-s, s],[ s,-s, s]], [[-s, s, s],[ s, s, s]],
+        [[-s,-s,-s],[-s, s,-s]], [[ s,-s,-s],[ s, s,-s]], [[-s,-s, s],[-s, s, s]], [[ s,-s, s],[ s, s, s]],
+        [[-s,-s,-s],[-s,-s, s]], [[ s,-s,-s],[ s,-s, s]], [[-s, s,-s],[-s, s, s]], [[ s, s,-s],[ s, s, s]]
+      ];
+      const e=edges[edge%12];
+      x=e[0][0]+(e[1][0]-e[0][0])*t + (Math.random()-0.5)*8;
+      y=e[0][1]+(e[1][1]-e[0][1])*t + (Math.random()-0.5)*8;
+      z=e[0][2]+(e[1][2]-e[0][2])*t + (Math.random()-0.5)*8;
+      arr[i].x=x; arr[i].y=y; arr[i].z=z;
+    }
+  }
+}
+initParticles(CFG.particleCount);
+
+function triggerShapeChange(){
+  // morph to next shape, also maybe change palette
+  for(let i=0;i<particles.length;i++){ shapeA[i].x=particles[i].x; shapeA[i].y=particles[i].y; shapeA[i].z=particles[i].z; }
+  randomShapeInto(shapeB);
+  morphT=0;
+  shapeHold=0;
+  if(Math.random()<0.55) pickPalette();
+}
+
+// --- Mouse / Camera ---
+let mouseX=W/2, mouseY=H/2, targetRX=0, targetRY=0, curRX=0, curRY=0;
+let isHover=true;
+window.addEventListener('mousemove',e=>{ mouseX=e.clientX; mouseY=e.clientY; });
+window.addEventListener('touchmove',e=>{ if(e.touches[0]){mouseX=e.touches[0].clientX; mouseY=e.touches[0].clientY; }}, {passive:true});
+canvas.addEventListener('click',()=> triggerShapeChange());
+canvas.addEventListener('dblclick',()=> pickPalette());
+
+// auto orbit when idle
+let idle=0;
+
+// --- Audio / BeatEngine ---
+let audioCtx, analyser, freqData, lowPower=0, medPower=0, hiPower=0;
+let beatLowThresh=0.32, beatMedThresh=0.28, beatHiThresh=0.25;
+let lastLowBeat=0, lastMedBeat=0, lastHiBeat=0;
+
+function setupAudio(){
+  if(audioCtx) return;
+  try{
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize=512;
+    freqData=new Uint8Array(analyser.frequencyBinCount);
+    const src=audioCtx.createMediaElementSource(audio);
+    src.connect(analyser);
+    analyser.connect(audioCtx.destination);
+  }catch(e){ console.log('WebAudio not available',e); }
+}
+
+async function tryPlayMusic(){
+  if(!CFG.playMusic) return;
+  if(!audio.src || !audio.src.includes('Saturated_Dreams')) audio.src='assets/Saturated_Dreams_1_0.mp3';
+  audio.volume=CFG.musicVolume/100;
+  try{
+    setupAudio();
+    if(audioCtx && audioCtx.state==='suspended') await audioCtx.resume();
+    await audio.play();
+    btn.style.display='none';
+  }catch(e){
+    btn.style.display='block';
+    btn.textContent='🔊 Click to enable music';
+    console.log('autoplay blocked',e);
+  }
+}
+btn.addEventListener('click', async()=>{
+  if(!audio.src || !audio.src.includes('Saturated_Dreams')) audio.src='assets/Saturated_Dreams_1_0.mp3';
+  audio.volume=CFG.musicVolume/100;
+  try{ setupAudio(); if(audioCtx && audioCtx.state==='suspended') await audioCtx.resume(); }catch(e){}
+  try{ await audio.play(); btn.style.display='none'; }catch(e){}
+});
+
+// Try on load (will be blocked until user gesture in wallpaper engine preview but often allowed in Wallpaper Engine)
+window.addEventListener('pointerdown',()=>{ if(audio.paused && CFG.playMusic) tryPlayMusic(); }, {once:true});
+setTimeout(tryPlayMusic, 400);
+
+let morphSpeed=0.022;
+
+// Wallpaper Engine audio capture (optional)
+if(window.wallpaperRegisterAudioListener){
+  window.wallpaperRegisterAudioListener(function(arr){
+    if(!CFG.useMicrophone) return;
+    const low=arr.slice(0,4).reduce((a,b)=>a+b,0)/4;
+    const med=arr.slice(8,24).reduce((a,b)=>a+b,0)/16;
+    const hi=arr.slice(40,64).reduce((a,b)=>a+b,0)/24;
+    const now=performance.now();
+    if(low>0.45 && now-lastLowBeat>380){ lastLowBeat=now; onLowBeat(low); }
+    if(med>0.35 && now-lastMedBeat>320){ lastMedBeat=now; onMedBeat(med); }
+    if(hi>0.32 && now-lastHiBeat>280){ lastHiBeat=now; onHiBeat(hi); }
+  });
+}
+
+function onLowBeat(p){ if(!CFG.beatReactive) return; // larger shape pulse
+  if(Math.random()<0.7) triggerShapeChange();
+}
+function onMedBeat(p){ if(!CFG.beatReactive) return;
+  if(Math.random()<0.35) pickPalette();
+  morphSpeed=0.045;
+}
+function onHiBeat(p){ // subtle color flicker
+}
+
+// --- Render loop ---
+let lastT=performance.now();
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt=Math.min(33, now-lastT)/16.66; lastT=now;
+
+  // palette lerp
+  if(paletteLerp<1){ paletteLerp=Math.min(1, paletteLerp+0.015*dt); }
+  if(paletteLerp<1){
+    // blend bg
+    bgColor=lerpColor(palette.bg, targetPalette.bg, paletteLerp);
+  } else { palette=targetPalette; bgColor=palette.bg; }
+
+  // morph
+  autoShapeTimer+=dt/60;
+  if(morphT<1){
+    morphT=Math.min(1, morphT+morphSpeed*dt);
+    morphSpeed=0.022 + (0.045-0.022)*(1-morphT)*0.5;
+    if(morphT>=1){ shapeHold=0; }
+  } else {
+    shapeHold+=dt/60;
+    if(shapeHold>CFG.shapeTime) triggerShapeChange();
+  }
+
+  // update particles positions with easing
+  const ease=0.065*dt;
+  for(let i=0;i<particles.length;i++){
+    const p=particles[i];
+    const tx = shapeA[i].x*(1-morphT) + shapeB[i].x*morphT;
+    const ty = shapeA[i].y*(1-morphT) + shapeB[i].y*morphT;
+    const tz = shapeA[i].z*(1-morphT) + shapeB[i].z*morphT;
+    p.x += (tx - p.x)*ease;
+    p.y += (ty - p.y)*ease;
+    p.z += (tz - p.z)*ease;
+  }
+
+  // rotation target from mouse (cursor-following like original CameraControls)
+  const nx=(mouseX/W)*2-1, ny=(mouseY/H)*2-1;
+  targetRY = nx * 0.9 * CFG.rotationSpeed;
+  targetRX = -ny * 0.55 * CFG.rotationSpeed;
+  curRY += (targetRY - curRY)*0.04*dt;
+  curRX += (targetRX - curRX)*0.04*dt;
+
+  // subtle auto rotation
+  const time=now*0.00018;
+  const autoRY = Math.sin(time*0.7)*0.08;
+  const autoRX = Math.cos(time*0.5)*0.05;
+  const rotY = curRY + autoRY;
+  const rotX = curRX + autoRX;
+
+  const cosY=Math.cos(rotY), sinY=Math.sin(rotY);
+  const cosX=Math.cos(rotX), sinX=Math.sin(rotX);
+
+  // beat analysis from <audio> analyser
+  let beatScale=1;
+  if(analyser && freqData && !audio.paused){
+    analyser.getByteFrequencyData(freqData);
+    const low = freqData.slice(2,10).reduce((a,b)=>a+b,0)/8/255;
+    const med = freqData.slice(12,40).reduce((a,b)=>a+b,0)/28/255;
+    const hi  = freqData.slice(50,110).reduce((a,b)=>a+b,0)/60/255;
+    const now2=performance.now();
+    if(low>beatLowThresh && now2-lastLowBeat>420){ lastLowBeat=now2; onLowBeat(low); }
+    if(med>beatMedThresh && now2-lastMedBeat>340){ lastMedBeat=now2; onMedBeat(med); }
+    if(hi>beatHiThresh && now2-lastHiBeat>300){ lastHiBeat=now2; onHiBeat(hi); }
+    beatScale = 1 + low*0.08 + med*0.04;
+  }
+
+  // background
+  const grad = ctx.createRadialGradient(W*0.5,H*0.5,0,W*0.5,H*0.5,Math.max(W,H)*0.9);
+  grad.addColorStop(0, lerpColor(bgColor, targetPalette.bg2||palette.bg2, 0.45));
+  grad.addColorStop(1, bgColor);
+  ctx.fillStyle=grad;
+  ctx.fillRect(0,0,W,H);
+
+  // subtle vignette
+  ctx.fillStyle='rgba(0,0,0,0.18)';
+  ctx.fillRect(0,0,W,H);
+
+  // 3D projection
+  const fov = 420;
+  const cx=W/2, cy=H/2;
+
+  // depth sort: compute projected and sort back-to-front for nicer alpha
+  let list=new Array(particles.length);
+  for(let i=0;i<particles.length;i++){
+    const p=particles[i];
+    // rotate Y then X
+    let x=p.x*beatScale, y=p.y*beatScale, z=p.z*beatScale;
+    let x1 = x*cosY - z*sinY;
+    let z1 = x*sinY + z*cosY;
+    let y1 = y*cosX - z1*sinX;
+    let z2 = y*sinX + z1*cosX;
+    // perspective
+    const perspective = fov/(fov+z2+420);
+    const sx = x1*perspective + cx;
+    const sy = y1*perspective + cy;
+    const size = Math.max(0.2, CFG.particleSize * perspective * 1.7);
+    const alpha = Math.max(0, Math.min(1, (perspective*1.2)));
+    // fog based on z
+    const depth = z2;
+    list[i]={sx,sy,size,alpha,depth, x1,y1,z2};
+  }
+  list.sort((a,b)=>a.depth-b.depth);
+
+  // draw dots
+  for(let i=0;i<list.length;i++){
+    const q=list[i];
+    if(q.sy<-60||q.sy>H+60||q.sx<-60||q.sx>W+60) continue;
+    // color per depth / palette mix
+    const t = (q.depth+600)/1200; // -600..600
+    const col = lerpColor(palette.dot, palette.dot2||targetPalette.dot2, (Math.sin(i*0.013)+1)/2*0.6 + 0.2 + t*0.12);
+    ctx.globalAlpha = q.alpha*0.92;
+    ctx.fillStyle = col;
+    // glow
+    if(q.size>1.6){
+      ctx.shadowColor = palette.glow||col;
+      ctx.shadowBlur = q.size*1.4;
+    } else ctx.shadowBlur=0;
+    ctx.beginPath();
+    ctx.arc(q.sx,q.sy,q.size,0,Math.PI*2);
+    ctx.fill();
+  }
+  ctx.shadowBlur=0;
+  ctx.globalAlpha=1;
+
+  // auto idle detection to gently drift mouse
+  idle+=dt;
+  if(idle>600){ mouseX = W/2 + Math.sin(now*0.0003)*W*0.22; mouseY = H/2 + Math.cos(now*0.00022)*H*0.18; }
+}
+requestAnimationFrame(frame);
+
+// Wallpaper Engine integration
+window.wallpaperPropertyListener = {
+  applyUserProperties: function(props){
+    if(props.schemecolor) { CFG.scheme=props.schemecolor.value; pickPalette(CFG.scheme===0?undefined:CFG.scheme-1); paletteLerp=0; }
+    if(props.particlecount) {
+      const v=Math.round(props.particlecount.value);
+      if(v!==CFG.particleCount){ CFG.particleCount=v; initParticles(v); }
+    }
+    if(props.particlesize) CFG.particleSize=props.particlesize.value;
+    if(props.rotationspeed) CFG.rotationSpeed=props.rotationspeed.value;
+    if(props.shapetime) CFG.shapeTime=props.shapetime.value;
+    if(props.playmusic) { CFG.playMusic=props.playmusic.value; if(CFG.playMusic) tryPlayMusic(); else { audio.pause(); btn.style.display='none'; } }
+    if(props.musicvolume) { CFG.musicVolume=props.musicvolume.value; audio.volume=CFG.musicVolume/100; }
+    if(props.beatreactive) CFG.beatReactive=props.beatreactive.value;
+    if(props.usemicrophone) CFG.useMicrophone=props.usemicrophone.value;
+  }
+};
+window.addEventListener('mousemove',()=> idle=0);
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) audio.pause(); else if(CFG.playMusic) audio.play().catch(()=>{}); });
+</script>
+</body>
+</html>

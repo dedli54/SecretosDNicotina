@@ -1,0 +1,81 @@
+{
+	"title": "SaturatedDreams - Particle Field",
+	"description": "Port of nl_barcinski SaturatedDreams Flash animation. 3D particle field forming random shapes (cube, spiral, attractor), color shifts, cursor-following rotation, music-reactive on beats. Original by secretsfornicotine.com.",
+	"type": "web",
+	"file": "index.html",
+	"preview": "preview.jpg",
+	"workshop_preview": "preview.jpg",
+	"general": {
+		"properties": {
+			"schemecolor": {
+				"text": "ui_binder: Color scheme",
+				"type": "combo",
+				"value": 0,
+				"options": [
+					{ "label": "Auto - Random", "value": 0 },
+					{ "label": "Petrol Pink", "value": 1 },
+					{ "label": "Black Yellow", "value": 2 },
+					{ "label": "Midnight Neon", "value": 3 },
+					{ "label": "Deep Dream", "value": 4 }
+				]
+			},
+			"particlecount": {
+				"text": "Particle count",
+				"type": "slider",
+				"value": 2500,
+				"min": 800,
+				"max": 6000,
+				"step": 100
+			},
+			"particlesize": {
+				"text": "Particle size",
+				"type": "slider",
+				"value": 2.2,
+				"min": 0.5,
+				"max": 5,
+				"step": 0.1
+			},
+			"rotationspeed": {
+				"text": "Cursor follow strength",
+				"type": "slider",
+				"value": 1,
+				"min": 0,
+				"max": 2,
+				"step": 0.1
+			},
+			"shapetime": {
+				"text": "Shape change interval (sec)",
+				"type": "slider",
+				"value": 6,
+				"min": 2,
+				"max": 20,
+				"step": 1
+			},
+			"playmusic": {
+				"text": "Play background music",
+				"type": "bool",
+				"value": true
+			},
+			"musicvolume": {
+				"text": "Music volume",
+				"type": "slider",
+				"value": 60,
+				"min": 0,
+				"max": 100,
+				"step": 1
+			},
+			"beatreactive": {
+				"text": "Beat-reactive shape changes",
+				"type": "bool",
+				"value": true
+			},
+			"usemicrophone": {
+				"text": "Use Wallpaper Engine audio (wallpaper audio capture)",
+				"type": "bool",
+				"value": false
+			}
+		}
+	},
+	"contentrating": "Everyone",
+	"version": 1
+}
