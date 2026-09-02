@@ -57,19 +57,42 @@ TestAssets.init();
 // --- Shapes exact ---
 const FilledCube={
  setParticles(field, first, count, size=100){
-  let _x=-size, _y=-size, _z=-size; const step=size*2/Math.pow(count,1/3); let p=first;
-  while(p){ p[field].x=_x; p[field].y=_y; p[field].z=_z; _x+=step; if(_x>size){_x=-size;_y+=step;} if(_y>size){_y=-size;_z+=step;} p=p.next; }
+  // EXACTO ORIGINAL: rejilla 3D regular FilledCube.as:14 — restaura animación ordenada de los cuadrados
+  let _x=-size, _y=-size, _z=-size;
+  const step=size*2/Math.pow(count,1/3);
+  let p=first;
+  while(p){
+   p[field].x=_x; p[field].y=_y; p[field].z=_z;
+   _x+=step; if(_x>size){ _x=-size; _y+=step; }
+   if(_y>size){ _y=-size; _z+=step; }
+   p=p.next;
+  }
  }
 };
 const Cube={
  setParticles(field, first, count, size=200){
+  // EXACTO ORIGINAL Cube.as:15 con floor — mantiene rejilla ordenada que anima bien.
+  // Solo parchea los 54 huecos poniéndolos aleatorio en superficie para que no falten bolitas (sin romper rejilla principal)
   let loc5=count/6, loc6=Math.sqrt(loc5)|0, loc9=size/2, loc10=size/loc6; let p=first;
-  for(let a=0;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=a*loc10-loc9; p[field].y=b*loc10-loc9; p[field].z=loc9; p=p.next; }
-  for(let a=0;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=a*loc10-loc9; p[field].y=b*loc10-loc9; p[field].z=-loc9; p=p.next; }
-  for(let a=1;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=-loc9; p[field].y=b*loc10-loc9; p[field].z=a*loc10-loc9; p=p.next; }
-  for(let a=0;a<loc6+1;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=loc9; p[field].y=b*loc10-loc9; p[field].z=a*loc10-loc9; p=p.next; }
-  for(let a=0;a<loc6+1;a++) for(let b=0;b<loc6+1;b++){ if(!p) return; p[field].x=b*loc10-loc9; p[field].y=loc9; p[field].z=a*loc10-loc9; p=p.next; }
-  for(let a=1;a<loc6;a++) for(let b=1;b<loc6;b++){ if(!p) return; p[field].x=b*loc10-loc9; p[field].y=-loc9; p[field].z=a*loc10-loc9; p=p.next; }
+  for(let a=0;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) break; p[field].x=a*loc10-loc9; p[field].y=b*loc10-loc9; p[field].z= loc9; p=p.next; }
+  for(let a=0;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) break; p[field].x=a*loc10-loc9; p[field].y=b*loc10-loc9; p[field].z=-loc9; p=p.next; }
+  for(let a=1;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) break; p[field].x=-loc9; p[field].y=b*loc10-loc9; p[field].z=a*loc10-loc9; p=p.next; }
+  for(let a=0;a<loc6+1;a++) for(let b=0;b<loc6;b++){ if(!p) break; p[field].x= loc9; p[field].y=b*loc10-loc9; p[field].z=a*loc10-loc9; p=p.next; }
+  for(let a=0;a<loc6+1;a++) for(let b=0;b<loc6+1;b++){ if(!p) break; p[field].x=b*loc10-loc9; p[field].y= loc9; p[field].z=a*loc10-loc9; p=p.next; }
+  for(let a=1;a<loc6;a++) for(let b=1;b<loc6;b++){ if(!p) break; p[field].x=b*loc10-loc9; p[field].y=-loc9; p[field].z=a*loc10-loc9; p=p.next; }
+  // 54 restantes (faltantes) → superficie aleatoria, no rompe animación principal
+  while(p){
+   const face=(Math.random()*6)|0, u=Math.random()-0.5, v=Math.random()-0.5, h=size/2;
+   switch(face){
+    case 0: p[field].x=u*size; p[field].y=v*size; p[field].z= h; break;
+    case 1: p[field].x=u*size; p[field].y=v*size; p[field].z=-h; break;
+    case 2: p[field].x= h; p[field].y=u*size; p[field].z=v*size; break;
+    case 3: p[field].x=-h; p[field].y=u*size; p[field].z=v*size; break;
+    case 4: p[field].x=u*size; p[field].y= h; p[field].z=v*size; break;
+    default: p[field].x=u*size; p[field].y=-h; p[field].z=v*size; break;
+   }
+   p=p.next;
+  }
  }
 };
 const Spiral={
@@ -80,7 +103,8 @@ const Spiral={
 };
 const StrangeAttractor={
  setParticles(field, first, a=1.111,b=1.479,c=4.494,d=0.44,e=0.135){
-  let x=1,y=1,z=1, scale=40; let p=first;
+  const sc=Math.min(W,H)/420;
+  let x=1,y=1,z=1, scale=40*sc; let p=first;
   while(p){ const nx=x+e*(-a*x - y*y - z*z + a*c); const ny=y+e*(-y + x*y - b*x*z + d); const nz=z+e*(-z + b*x*y + x*z); x=nx;y=ny;z=nz; p[field].x=x*scale; p[field].y=y*scale; p[field].z=z*scale; p=p.next; }
  }
 };
@@ -96,7 +120,7 @@ const EffectRotator={
    case 3: Spiral.setParticles(field, first, cnt, 120*sc,300*sc,0.01+vol*0.01,0.1+vol*0.01); break;
    case 4: StrangeAttractor.setParticles(field, first, 1.111+vol*0.1,1.479+vol*0.1); break;
    case 5: Spiral.setParticles(field, first, cnt, 120*sc,300*sc,0.03+vol*0.03,0.3); break;
-   case 6: FilledCube.setParticles(field, first, cnt, (80+vol*15)*sc); break; // 6 era no-op en original, lo mapeamos a FilledCube para que siempre se vea cambio
+   case 6: FilledCube.setParticles(field, first, cnt, (80+vol*15)*sc); break;
    case 7: Cube.setParticles(field, first, cnt, 100*sc); break;
    case 8: StrangeAttractor.setParticles(field, first, 4.686349188388582+vol*0.01,1.479); break;
    case 9: StrangeAttractor.setParticles(field, first, 2.125+vol*0.01,1.12265625,4.56875,0.6547760900473961,0.13273437500000002); break;
@@ -150,11 +174,11 @@ class BitmapView{
  step(){ this.particles.step(); }
 }
 class PixelView{
- constructor(){
-  this.particles=new PointEngine(800,600); this.NUM_PARTICLES=40000; this.particles.zSort=false; this.particles.camera.z=200;
-  this.createParticles(); this.background='#FFFFFF';
- }
- createParticles(){ for(let i=0;i<this.NUM_PARTICLES;i++){ const p=new Particle(); p.target=new V3(); p.speed=new V3(); this.particles.addParticle(p);} this.positionParticles(); }
+  constructor(){
+   this.particles=new PointEngine(800,600); this.NUM_PARTICLES=40000; this.particles.zSort=false; this.particles.camera.z=200;
+   this.createParticles(); this.background='#FFFFFF';
+  }
+  createParticles(){ for(let i=0;i<this.NUM_PARTICLES;i++){ const p=new Particle(); p.target=new V3(); p.speed=new V3(); this.particles.addParticle(p);} this.positionParticles(); }
  positionParticles(){ const sc=Math.min(W,H)/420; FilledCube.setParticles('position', this.particles.pListFirst, this.NUM_PARTICLES, 100*sc); FilledCube.setParticles('target', this.particles.pListFirst, this.NUM_PARTICLES, 100*sc); }
  getParticles(){ return this.particles; }
  step(){ this.particles.step(); }
@@ -304,22 +328,14 @@ addEventListener('mousemove',e=>{ mouseX=e.clientX; mouseY=e.clientY; bitmaps.pa
 // Click deshabilitado: antes cambiaba figura al click, ahora todo es aleatorio/beats como original. Si quieres debug, descomenta:
 // canvas.addEventListener('click',()=> effects.getEffect(effects.getRandomIndex(),'position', _currentView.getParticles()));
 
-// onEnterFrame exact 60fps — FIEL: spring cuando ANIM_SPRINGS, else volume-morph
-// Para que "casi todas" se vean animadas, forzamos spring SIEMPRE y solo cuando hay audio real usamos volume-morph
+// onEnterFrame exact 60fps — FIEL 1:1 a SaturatedDreams.as:205
 function onEnterFrame(){
  camcontrols.checkMouse(bitmaps.particles);
- const vol=sampleVoulme();
- const hasAudio = vol>0.02 && !audio.paused;
- if(animMode===0 || !hasAudio){
-  // SPRINGS: morph suave target→position (es lo que anima el cambio de forma)
+ if(animMode===0){
   Animations.spring(_currentView.getParticles().pListFirst);
-  // además, rotación sutil continua para que el donut/torus nunca se quede estático (no estaba en original, pero hace que se vea vivo)
-  // lo hacemos via matrix extra 0.15° por frame
-  _currentView.getParticles().matrix.rotY += 0.12;
  } else {
-  // ANIM_NONE original: re-aplica lastRandom con volumen cada frame
-  effects.getEffect(effects.lastRandom,'position', _currentView.getParticles(), vol*1.2);
-  Animations.spring(_currentView.getParticles().pListFirst); // también spring para que no sea snap seco
+  const vol=sampleVoulme();
+  effects.getEffect(effects.lastRandom,'position', _currentView.getParticles(), vol);
  }
  _currentView.step();
 }
