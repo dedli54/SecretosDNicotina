@@ -3,453 +3,243 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SaturatedDreams - Wallpaper Engine</title>
+<title>SaturatedDreams - Exact Port</title>
 <style>
-  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#0a1a22;font-family:system-ui,sans-serif}
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000}
   canvas{display:block;width:100%;height:100%}
-  #overlay{position:fixed;bottom:12px;left:12px;color:rgba(255,255,255,0.35);font-size:10px;letter-spacing:0.08em;pointer-events:none;text-shadow:0 1px 4px rgba(0,0,0,0.6)}
-  #audioToggle{position:fixed;top:12px;right:12px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:6px 10px;border-radius:20px;font-size:11px;cursor:pointer;backdrop-filter:blur(6px);display:none}
-  #audioToggle:hover{background:rgba(255,255,255,0.12)}
+  #overlay{position:fixed;bottom:10px;left:12px;color:rgba(255,255,255,0.32);font-size:10px;letter-spacing:0.06em;pointer-events:none;font-family:system-ui}
+  #audioBtn{position:fixed;top:12px;right:12px;background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:7px 12px;border-radius:20px;font-size:11px;cursor:pointer;backdrop-filter:blur(6px);display:none}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="overlay">SaturatedDreams — move cursor to rotate • click to change shape • double-click to change palette</div>
-<button id="audioToggle">🔊 Enable music</button>
-<audio id="bgm" loop preload="auto" crossorigin="anonymous"></audio>
+<div id="overlay">SaturatedDreams — EXACT PORT • mueve el cursor para rotar • 16 lowBeats cambia vista • 12 medBeats cambia forma</div>
+<button id="audioBtn">🔊 Activar música</button>
+<audio id="bgm" loop preload="auto"></audio>
 <script>
-// SaturatedDreams port - replicates Flash ParticlesEngine + BeatEngine behavior
-// Original: nl_barcinski.dreams.SaturatedDreams (Flex 3, AS3)
-// Features: random shapes/forms, background+dot color shifts, cursor-following rotation, beat reactive
+// EXACT PORT of nl_barcinski.dreams.SaturatedDreams (Flex 3, AS3) - JPEXS 19.0.0
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d'), audio=document.getElementById('bgm'), btn=document.getElementById('audioBtn');
+let W=innerWidth, H=innerHeight, DPR=devicePixelRatio||1;
+function resize(){W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',resize);resize();
 
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-const audio = document.getElementById('bgm');
-const btn = document.getElementById('audioToggle');
+const STYLES=[
+  {name:'BlackYellow', background:'#000000', colors:['#E7FB15'], alphas:[1]},
+  {name:'PetrolPink',  background:'#0A3C41', colors:['#E59AA6','#EE5D80'], alphas:[1,1]}
+];
+let CFG={particleCount:2000, focal:480, cameraZ:200};
+class V3{constructor(x=0,y=0,z=0){this.x=x;this.y=y;this.z=z;}}
+class Particle{constructor(){this.position=new V3(); this.screen=new V3(); this.screenZ=0; this._bitmap=null; this.target=new V3(); this.speed=new V3(); this.next=null;}}
+let pListFirst=null, pListLast=null, Num_particles=0, sortArray=[];
+function addParticle(p){ if(!pListFirst){pListFirst=p; pListLast=p;} else {pListLast.next=p; pListLast=p;} sortArray.push(p); Num_particles++; }
+function rebuildSort(){ sortArray.sort((a,b)=>a.screenZ-b.screenZ); if(sortArray.length){ pListFirst=sortArray[0]; for(let i=0;i<sortArray.length-1;i++) sortArray[i].next=sortArray[i+1]; sortArray[sortArray.length-1].next=null; pListLast=sortArray[sortArray.length-1];} }
+let assets={circ1:null,circ2:null, colors:STYLES[0].colors, cnt:0,
+  init(){
+    this.circ1=document.createElement('canvas'); this.circ1.width=64; this.circ1.height=64;
+    this.circ2=document.createElement('canvas'); this.circ2.width=64; this.circ2.height=64;
+    this.setStyle(STYLES[0]);
+  },
+  getRandom(){ this.cnt++; return (this.cnt%2===0)? this.circ1 : this.circ2; },
+  setStyle(style){
+    this.colors=style.colors;
+    const draw=(cvs,color)=>{ const g=cvs.getContext('2d'); g.clearRect(0,0,64,64); g.fillStyle=color; g.beginPath(); g.arc(32,32,31,0,Math.PI*2); g.fill(); };
+    draw(this.circ1, this.colors[0]);
+    draw(this.circ2, this.colors.length>1? this.colors[1] : this.colors[0]);
+  }
+};
+assets.init();
 
-let W=0,H=0,DPR=window.devicePixelRatio||1;
-function resize(){
-  W=window.innerWidth; H=window.innerHeight;
-  canvas.width=W*DPR; canvas.height=H*DPR;
-  canvas.style.width=W+'px'; canvas.style.height=H+'px';
-  ctx.setTransform(DPR,0,0,DPR,0,0);
-}
-window.addEventListener('resize',resize); resize();
-
-// --- Config (Wallpaper Engine properties will override) ---
-let CFG = {
-  particleCount: 2500,
-  particleSize: 2.2,
-  rotationSpeed: 1.0,
-  shapeTime: 6,
-  scheme: 0, // 0 auto
-  playMusic: true,
-  musicVolume: 60,
-  beatReactive: true,
-  useMicrophone: false
+// --- Shapes exact AS ---
+const FilledCube={
+  setParticles(field, first, count, size=100){
+    let _x=-size, _y=-size, _z=-size;
+    const step = size*2 / Math.pow(count,1/3);
+    let p=first;
+    while(p){ p[field].x=_x; p[field].y=_y; p[field].z=_z; _x+=step; if(_x>size){ _x=-size; _y+=step; } if(_y>size){ _y=-size; _z+=step; } p=p.next; }
+  }
+};
+const Cube={
+  setParticles(field, first, count, size=200){
+    let loc5=count/6, loc6=Math.sqrt(loc5)|0, loc9=size/2, loc10=size/loc6;
+    let p=first;
+    for(let a=0;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=a*loc10-loc9; p[field].y=b*loc10-loc9; p[field].z=loc9; p=p.next; }
+    for(let a=0;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=a*loc10-loc9; p[field].y=b*loc10-loc9; p[field].z=-loc9; p=p.next; }
+    for(let a=1;a<loc6;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=-loc9; p[field].y=b*loc10-loc9; p[field].z=a*loc10-loc9; p=p.next; }
+    for(let a=0;a<loc6+1;a++) for(let b=0;b<loc6;b++){ if(!p) return; p[field].x=loc9; p[field].y=b*loc10-loc9; p[field].z=a*loc10-loc9; p=p.next; }
+    for(let a=0;a<loc6+1;a++) for(let b=0;b<loc6+1;b++){ if(!p) return; p[field].x=b*loc10-loc9; p[field].y=loc9; p[field].z=a*loc10-loc9; p=p.next; }
+    for(let a=1;a<loc6;a++) for(let b=1;b<loc6;b++){ if(!p) return; p[field].x=b*loc10-loc9; p[field].y=-loc9; p[field].z=a*loc10-loc9; p=p.next; }
+  }
+};
+const Spiral={
+  setParticles(field, first, count, p4=120, p5=300, p6=0.01, p7=NaN){
+    let _y=-p5/2, t=0; const stepY=p5/count; let useSin=!isNaN(p7); let p=first;
+    while(p){ let r=p4; if(useSin) r=Math.sin(t*p7)*p4; p[field].x=Math.sin(t)*r; p[field].y=_y; p[field].z=Math.cos(t)*r; t+=p6; _y+=stepY; p=p.next; }
+  }
+};
+const StrangeAttractor={
+  setParticles(field, first, a=1.111, b=1.479, c=4.494, d=0.44, e=0.135){
+    let x=1,y=1,z=1, scale=40; let p=first;
+    while(p){
+      const nx = x + e*(-a*x - y*y - z*z + a*c);
+      const ny = y + e*(-y + x*y - b*x*z + d);
+      const nz = z + e*(-z + b*x*y + x*z);
+      x=nx; y=ny; z=nz;
+      p[field].x=x*scale; p[field].y=y*scale; p[field].z=z*scale;
+      p=p.next;
+    }
+  }
+};
+const EffectRotator={
+  lastRandom:1,
+  getRandomIndex(){ this.lastRandom = (Math.random()*9+0.5)|0 +1; return this.lastRandom; },
+  getEffect(idx, field, first, vol=0){
+    const sc=Math.min(W,H)/420;
+    switch(idx){
+      case 1: FilledCube.setParticles(field, first, Num_particles, (100+vol*20)*sc); break;
+      case 2: Spiral.setParticles(field, first, Num_particles, 120*sc,300*sc,0.4+vol*0.0001); break;
+      case 3: Spiral.setParticles(field, first, Num_particles, 120*sc,300*sc,0.01+vol*0.01,0.1+vol*0.01); break;
+      case 4: StrangeAttractor.setParticles(field, first, 1.111+vol*0.1,1.479+vol*0.1); break;
+      case 5: Spiral.setParticles(field, first, Num_particles, 120*sc,300*sc,0.03+vol*0.03,0.3); break;
+      case 7: Cube.setParticles(field, first, Num_particles, 100*sc); break;
+      case 8: StrangeAttractor.setParticles(field, first, 4.686349188388582+vol*0.01,1.479); break;
+      case 9: StrangeAttractor.setParticles(field, first, 2.125+vol*0.01,1.12265625,4.56875,0.6547760900473961,0.13273437500000002); break;
+      case 10:StrangeAttractor.setParticles(field, first, 2.125,1.3284374999999997,4.1996875+vol*0.001,0.6547760900473961,0.146796875); break;
+    }
+  }
+};
+const Animations={
+  spring(first){
+    let p=first; const k=0.02;
+    while(p){ const dx=p.target.x - p.position.x, dy=p.target.y - p.position.y, dz=p.target.z - p.position.z; p.speed.x+=dx*k; p.speed.y+=dy*k; p.speed.z+=dz*k; p.speed.x*=0.8; p.speed.y*=0.8; p.speed.z*=0.8; p.position.x+=p.speed.x; p.position.y+=p.speed.y; p.position.z+=p.speed.z; p=p.next; }
+  }
 };
 
-// palettes matching original styles: PetrolPink, BlackYellow + extras
-const PALETTES = [
-  { name:'PetrolPink', bg:'#0a2a33', bg2:'#1a4a52', dot:'#ff6b9d', dot2:'#4ecdc4', glow:'#ff8fab' },
-  { name:'BlackYellow', bg:'#080808', bg2:'#1a1a00', dot:'#ffdd00', dot2:'#ff8800', glow:'#ffee66' },
-  { name:'MidnightNeon', bg:'#020617', bg2:'#0f172a', dot:'#38bdf8', dot2:'#a78bfa', glow:'#67e8f9' },
-  { name:'DeepDream', bg:'#1a0a2e', bg2:'#2d0b4a', dot:'#ff2a6d', dot2:'#05d9e8', glow:'#ff6b9d' },
-  { name:'Sunset', bg:'#1a0a0a', bg2:'#3a1a1a', dot:'#ff6b35', dot2:'#f7c59f', glow:'#ff8c61' },
-  { name:'Forest', bg:'#0a1a0f', bg2:'#143d1f', dot:'#7ae582', dot2:'#caffbf', glow:'#a7ff83' }
-];
-let paletteIdx = 0;
-let palette = PALETTES[0];
-let targetPalette = PALETTES[0];
-let paletteLerp = 1;
-
-function pickPalette(forcedIdx){
-  if(forcedIdx!==undefined){ paletteIdx=forcedIdx; targetPalette=PALETTES[forcedIdx % PALETTES.length]; paletteLerp=0; return; }
-  if(CFG.scheme!==0){ let idx=CFG.scheme-1; targetPalette=PALETTES[idx]; paletteIdx=idx; paletteLerp=0; return; }
-  let n; do{ n=Math.floor(Math.random()*PALETTES.length);}while(n===paletteIdx);
-  paletteIdx=n; targetPalette=PALETTES[n]; paletteLerp=0;
+// create particles
+function createParticles(n){
+  pListFirst=null; pListLast=null; Num_particles=0; sortArray=[];
+  for(let i=0;i<n;i++){ const p=new Particle(); p._bitmap=assets.getRandom(); p.target=new V3(); p.speed=new V3(); addParticle(p); }
+  const sc=Math.min(W,H)/420;
+  FilledCube.setParticles('position', pListFirst, n, 100*sc);
+  FilledCube.setParticles('target', pListFirst, n, 100*sc);
+  const initIdx=[2,7,1,5][Math.floor(Math.random()*4)];
+  EffectRotator.getEffect(initIdx,'target',pListFirst,0);
+  let pp=pListFirst; while(pp){ pp.position.x=pp.target.x*0.92; pp.position.y=pp.target.y*0.92; pp.position.z=pp.target.z*0.92; pp=pp.next; }
 }
-pickPalette(0);
+createParticles(CFG.particleCount);
 
-function lerpColor(a,b,t){
-  const ah=parseInt(a.slice(1),16), bh=parseInt(b.slice(1),16);
-  const ar=(ah>>16)&255, ag=(ah>>8)&255, ab=ah&255;
-  const br=(bh>>16)&255, bg=(bh>>8)&255, bb=bh&255;
-  const nr=Math.round(ar+(br-ar)*t), ng=Math.round(ag+(bg-ag)*t), nb=Math.round(ab+(bb-ab)*t);
-  return `rgb(${nr},${ng},${nb})`;
+// CameraControls exact
+let cam={dx:0,dy:0, matrix:{rotX:0,rotY:0}};
+function checkMouse(mx,my){
+  const cx=mx - W/2, cy=my - H/2;
+  cam.dx += (cx - cam.dx)*0.1;
+  cam.dy += (cy - cam.dy)*0.1;
+  cam.matrix.rotX = cam.dy*0.4;
+  cam.matrix.rotY = cam.dx*0.4;
 }
-let bgColor = palette.bg;
-
-// --- Shape generators (matching AS3 shapes: Cube, FilledCube, Spiral, StrangeAttractor) ---
-const SHAPES = ['cube','filledCube','sphere','spiral','torus','attractor','wave','cubeWire'];
-let lastShape='';
-
-function randomShapeInto(arr){
-  let s;
-  do{ s=SHAPES[Math.floor(Math.random()*SHAPES.length)]; }while(s===lastShape);
-  lastShape=s;
-  genShape(s, arr);
-}
-
-// --- Particles ---
-let particles = [];
-let shapeA = [], shapeB = [];
-let morphT = 1; // 0->1 morph between A and B
-let shapeHold = 0;
-let autoShapeTimer=0;
-
-function initParticles(n){
-  particles = new Array(n);
-  shapeA = new Array(n);
-  shapeB = new Array(n);
-  for(let i=0;i<n;i++){
-    particles[i]={x:0,y:0,z:0, tx:0,ty:0,tz:0, ox:0,oy:0,oz:0, r: Math.random()*Math.PI*2};
-    shapeA[i]={x:0,y:0,z:0};
-    shapeB[i]={x:0,y:0,z:0};
-  }
-  randomShapeInto(shapeA);
-  randomShapeInto(shapeB);
-  for(let i=0;i<n;i++){ particles[i].x=shapeA[i].x; particles[i].y=shapeA[i].y; particles[i].z=shapeA[i].z; }
-  morphT=1;
-}
-
-function genShape(name, arr){
-  const n=arr.length;
-  const scale = Math.min(W,H)*0.32;
-  if(name==='cube'){
-    // surface of cube
-    for(let i=0;i<n;i++){
-      let face=Math.floor(Math.random()*6);
-      let a=(Math.random()-0.5)*2, b=(Math.random()-0.5)*2;
-      let x=0,y=0,z=0;
-      if(face===0){x=1; y=a; z=b;}
-      else if(face===1){x=-1; y=a; z=b;}
-      else if(face===2){y=1; x=a; z=b;}
-      else if(face===3){y=-1; x=a; z=b;}
-      else if(face===4){z=1; x=a; y=b;}
-      else {z=-1; x=a; y=b;}
-      arr[i].x=x*scale; arr[i].y=y*scale; arr[i].z=z*scale;
-    }
-  } else if(name==='filledCube'){
-    for(let i=0;i<n;i++){
-      arr[i].x=(Math.random()-0.5)*2*scale;
-      arr[i].y=(Math.random()-0.5)*2*scale;
-      arr[i].z=(Math.random()-0.5)*2*scale;
-    }
-  } else if(name==='sphere'){
-    for(let i=0;i<n;i++){
-      const u=Math.random(), v=Math.random();
-      const theta=2*Math.PI*u, phi=Math.acos(2*v-1);
-      const r=scale*(0.9+Math.random()*0.15);
-      arr[i].x=r*Math.sin(phi)*Math.cos(theta);
-      arr[i].y=r*Math.sin(phi)*Math.sin(theta);
-      arr[i].z=r*Math.cos(phi);
-    }
-  } else if(name==='spiral'){
-    // multi-arm spiral (as in original Spiral shape)
-    const arms=3;
-    for(let i=0;i<n;i++){
-      const arm=Math.floor(Math.random()*arms);
-      const t=Math.random()*Math.PI*4;
-      const rad=(t/Math.PI/4)*scale*0.55 + Math.random()*12;
-      const ang=t + arm*(Math.PI*2/arms);
-      const y=(Math.random()-0.5)*scale*0.45 + Math.sin(t*2)*20;
-      arr[i].x=Math.cos(ang)*rad;
-      arr[i].z=Math.sin(ang)*rad;
-      arr[i].y=y;
-    }
-  } else if(name==='torus'){
-    const R=scale*0.65, r=scale*0.28;
-    for(let i=0;i<n;i++){
-      const u=Math.random()*Math.PI*2, v=Math.random()*Math.PI*2;
-      arr[i].x=(R+r*Math.cos(v))*Math.cos(u);
-      arr[i].y=r*Math.sin(v);
-      arr[i].z=(R+r*Math.cos(v))*Math.sin(u);
-    }
-  } else if(name==='attractor'){
-    // StrangeAttractor - Lorenz
-    let x=0.1,y=0,z=0;
-    const sigma=10, rho=28, beta=8/3;
-    const dt=0.005;
-    // warmup
-    for(let k=0;k<2000;k++){ const dx=sigma*(y-x), dy=x*(rho-z)-y, dz=x*y-beta*z; x+=dx*dt; y+=dy*dt; z+=dz*dt; }
-    for(let i=0;i<n;i++){
-      for(let s=0;s<6;s++){ const dx=sigma*(y-x), dy=x*(rho-z)-y, dz=x*y-beta*z; x+=dx*dt; y+=dy*dt; z+=dz*dt; }
-      arr[i].x=x*8; arr[i].y=z*8 - scale*0.2; arr[i].z=y*8;
-      // scale to fit
-      const m=1.1; arr[i].x*=scale/180*m; arr[i].y*=scale/260*m; arr[i].z*=scale/180*m;
-    }
-  } else if(name==='wave'){
-    for(let i=0;i<n;i++){
-      const x=(Math.random()-0.5)*2*scale;
-      const z=(Math.random()-0.5)*2*scale;
-      const d=Math.sqrt(x*x+z*z);
-      const y=Math.sin(d*0.015)*80 + Math.cos(x*0.02)*30;
-      arr[i].x=x; arr[i].z=z; arr[i].y=y;
-    }
-  } else if(name==='cubeWire'){
-    // edges only
-    for(let i=0;i<n;i++){
-      const edge=Math.floor(Math.random()*12);
-      const t=Math.random();
-      let x,y,z;
-      const s=scale;
-      // 12 edges of cube
-      const edges=[
-        [[-s,-s,-s],[ s,-s,-s]], [[-s, s,-s],[ s, s,-s]], [[-s,-s, s],[ s,-s, s]], [[-s, s, s],[ s, s, s]],
-        [[-s,-s,-s],[-s, s,-s]], [[ s,-s,-s],[ s, s,-s]], [[-s,-s, s],[-s, s, s]], [[ s,-s, s],[ s, s, s]],
-        [[-s,-s,-s],[-s,-s, s]], [[ s,-s,-s],[ s,-s, s]], [[-s, s,-s],[-s, s, s]], [[ s, s,-s],[ s, s, s]]
-      ];
-      const e=edges[edge%12];
-      x=e[0][0]+(e[1][0]-e[0][0])*t + (Math.random()-0.5)*8;
-      y=e[0][1]+(e[1][1]-e[0][1])*t + (Math.random()-0.5)*8;
-      z=e[0][2]+(e[1][2]-e[0][2])*t + (Math.random()-0.5)*8;
-      arr[i].x=x; arr[i].y=y; arr[i].z=z;
-    }
+let currentViewStyle=0, currentStyle=STYLES[0], pixelMode=false, background=STYLES[0].background;
+function showRandomView(){
+  currentViewStyle++; if(currentViewStyle>2) currentViewStyle=0;
+  switch(currentViewStyle){
+    case 0: pixelMode=false; currentStyle=STYLES[0]; background=currentStyle.background; assets.setStyle(currentStyle); break;
+    case 1: pixelMode=true; background='#FFFFFF'; break;
+    case 2: pixelMode=false; currentStyle=STYLES[1]; background=currentStyle.background; assets.setStyle(currentStyle); break;
   }
 }
-initParticles(CFG.particleCount);
+let animMode=1;
+function toggleAnimmode(){ animMode=(animMode===1?0:1); }
+let lowBeatsCount=0, medBeatsCount=0;
+function onLowBeat(){ if(Math.random()<0.1) toggleAnimmode(); if(lowBeatsCount%16===0) showRandomView(); lowBeatsCount++; }
+function onMedBeat(){ if(medBeatsCount%12===0){ if(Math.random()>0.5) EffectRotator.getEffect(EffectRotator.getRandomIndex(),'position',pListFirst); else EffectRotator.getEffect(EffectRotator.getRandomIndex(),'target',pListFirst); } medBeatsCount++; }
+function onHiBeat(){}
 
-function triggerShapeChange(){
-  // morph to next shape, also maybe change palette
-  for(let i=0;i<particles.length;i++){ shapeA[i].x=particles[i].x; shapeA[i].y=particles[i].y; shapeA[i].z=particles[i].z; }
-  randomShapeInto(shapeB);
-  morphT=0;
-  shapeHold=0;
-  if(Math.random()<0.55) pickPalette();
-}
-
-// --- Mouse / Camera ---
-let mouseX=W/2, mouseY=H/2, targetRX=0, targetRY=0, curRX=0, curRY=0;
-let isHover=true;
-window.addEventListener('mousemove',e=>{ mouseX=e.clientX; mouseY=e.clientY; });
-window.addEventListener('touchmove',e=>{ if(e.touches[0]){mouseX=e.touches[0].clientX; mouseY=e.touches[0].clientY; }}, {passive:true});
-canvas.addEventListener('click',()=> triggerShapeChange());
-canvas.addEventListener('dblclick',()=> pickPalette());
-
-// auto orbit when idle
-let idle=0;
-
-// --- Audio / BeatEngine ---
-let audioCtx, analyser, freqData, lowPower=0, medPower=0, hiPower=0;
-let beatLowThresh=0.32, beatMedThresh=0.28, beatHiThresh=0.25;
-let lastLowBeat=0, lastMedBeat=0, lastHiBeat=0;
-
+// Audio
+let audioCtx, analyser, dataArray; let lastLow=0,lastMed=0,lastHi=0;
 function setupAudio(){
   if(audioCtx) return;
-  try{
-    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize=512;
-    freqData=new Uint8Array(analyser.frequencyBinCount);
-    const src=audioCtx.createMediaElementSource(audio);
-    src.connect(analyser);
-    analyser.connect(audioCtx.destination);
-  }catch(e){ console.log('WebAudio not available',e); }
+  try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); analyser=audioCtx.createAnalyser(); analyser.fftSize=1024; dataArray=new Uint8Array(analyser.frequencyBinCount); const src=audioCtx.createMediaElementSource(audio); src.connect(analyser); analyser.connect(audioCtx.destination);}catch(e){}
 }
-
-async function tryPlayMusic(){
-  if(!CFG.playMusic) return;
-  if(!audio.src || !audio.src.includes('Saturated_Dreams')) audio.src='assets/Saturated_Dreams_1_0.mp3';
-  audio.volume=CFG.musicVolume/100;
-  try{
-    setupAudio();
-    if(audioCtx && audioCtx.state==='suspended') await audioCtx.resume();
-    await audio.play();
-    btn.style.display='none';
-  }catch(e){
-    btn.style.display='block';
-    btn.textContent='🔊 Click to enable music';
-    console.log('autoplay blocked',e);
+async function tryPlay(){ if(!audio.src) audio.src='assets/Saturated_Dreams_1_0.mp3'; audio.volume=0.65; try{ setupAudio(); if(audioCtx && audioCtx.state==='suspended') await audioCtx.resume(); await audio.play(); btn.style.display='none'; }catch(e){ btn.style.display='block'; } }
+btn.addEventListener('click', tryPlay);
+addEventListener('pointerdown',()=>{ if(audio.paused) tryPlay(); },{once:true});
+setTimeout(tryPlay,500);
+function updateBeats(){
+  if(!analyser || audio.paused) return 0;
+  analyser.getByteFrequencyData(dataArray);
+  const bands=32, binPerBand=Math.floor(dataArray.length/bands);
+  let leftPower=new Array(bands).fill(0);
+  for(let i=0;i<bands;i++){ let sum=0; for(let j=0;j<binPerBand;j++) sum+=dataArray[i*binPerBand+j]/255; sum/=binPerBand; leftPower[i]=Math.pow(Math.min(1,sum), 1/(i*0.25+1)); }
+  const now=performance.now();
+  const lowPow=Math.max(...leftPower.slice(0,5)), medPow=Math.max(...leftPower.slice(5,16)), hiPow=Math.max(...leftPower.slice(16,32));
+  if(lowPow>0.38 && now-lastLow>420){ lastLow=now; onLowBeat(); }
+  if(medPow>0.32 && now-lastMed>380){ lastMed=now; onMedBeat(); }
+  if(hiPow>0.28 && now-lastHi>320){ lastHi=now; onHiBeat(); }
+  return leftPower[bands-1];
+}
+function project(){
+  const rx=cam.matrix.rotX*Math.PI/180, ry=cam.matrix.rotY*Math.PI/180;
+  const cosX=Math.cos(rx), sinX=Math.sin(rx), cosY=Math.cos(ry), sinY=Math.sin(ry);
+  const focal=CFG.focal, cx=W/2, cy=H/2;
+  let p=pListFirst;
+  while(p){
+    let x=p.position.x, y=p.position.y, z=p.position.z;
+    let x1=x*cosY - z*sinY, z1=x*sinY + z*cosY;
+    let y1=y*cosX - z1*sinX, z2=y*sinX + z1*cosX;
+    z2+=CFG.cameraZ;
+    const persp = focal/(focal+z2);
+    p.screen.x = x1*persp + cx;
+    p.screen.y = y1*persp + cy;
+    p.screenZ = persp;
+    if(z2< -focal+10) p.screenZ=-1;
+    p=p.next;
   }
 }
-btn.addEventListener('click', async()=>{
-  if(!audio.src || !audio.src.includes('Saturated_Dreams')) audio.src='assets/Saturated_Dreams_1_0.mp3';
-  audio.volume=CFG.musicVolume/100;
-  try{ setupAudio(); if(audioCtx && audioCtx.state==='suspended') await audioCtx.resume(); }catch(e){}
-  try{ await audio.play(); btn.style.display='none'; }catch(e){}
-});
-
-// Try on load (will be blocked until user gesture in wallpaper engine preview but often allowed in Wallpaper Engine)
-window.addEventListener('pointerdown',()=>{ if(audio.paused && CFG.playMusic) tryPlayMusic(); }, {once:true});
-setTimeout(tryPlayMusic, 400);
-
-let morphSpeed=0.022;
-
-// Wallpaper Engine audio capture (optional)
 if(window.wallpaperRegisterAudioListener){
   window.wallpaperRegisterAudioListener(function(arr){
-    if(!CFG.useMicrophone) return;
-    const low=arr.slice(0,4).reduce((a,b)=>a+b,0)/4;
-    const med=arr.slice(8,24).reduce((a,b)=>a+b,0)/16;
-    const hi=arr.slice(40,64).reduce((a,b)=>a+b,0)/24;
+    const low=Math.max(...arr.slice(0,5)), med=Math.max(...arr.slice(5,16)), hi=Math.max(...arr.slice(16,32));
     const now=performance.now();
-    if(low>0.45 && now-lastLowBeat>380){ lastLowBeat=now; onLowBeat(low); }
-    if(med>0.35 && now-lastMedBeat>320){ lastMedBeat=now; onMedBeat(med); }
-    if(hi>0.32 && now-lastHiBeat>280){ lastHiBeat=now; onHiBeat(hi); }
+    if(low>0.45 && now-lastLow>400){ lastLow=now; onLowBeat(); }
+    if(med>0.35 && now-lastMed>380){ lastMed=now; onMedBeat(); }
+    if(hi>0.32 && now-lastHi>320){ lastHi=now; onHiBeat(); }
   });
 }
-
-function onLowBeat(p){ if(!CFG.beatReactive) return; // larger shape pulse
-  if(Math.random()<0.7) triggerShapeChange();
-}
-function onMedBeat(p){ if(!CFG.beatReactive) return;
-  if(Math.random()<0.35) pickPalette();
-  morphSpeed=0.045;
-}
-function onHiBeat(p){ // subtle color flicker
-}
-
-// --- Render loop ---
-let lastT=performance.now();
-function frame(now){
+let mouseX=W/2, mouseY=H/2;
+addEventListener('mousemove',e=>{mouseX=e.clientX; mouseY=e.clientY;});
+canvas.addEventListener('click',()=> EffectRotator.getEffect(EffectRotator.getRandomIndex(),'position',pListFirst));
+function frame(){
   requestAnimationFrame(frame);
-  const dt=Math.min(33, now-lastT)/16.66; lastT=now;
-
-  // palette lerp
-  if(paletteLerp<1){ paletteLerp=Math.min(1, paletteLerp+0.015*dt); }
-  if(paletteLerp<1){
-    // blend bg
-    bgColor=lerpColor(palette.bg, targetPalette.bg, paletteLerp);
-  } else { palette=targetPalette; bgColor=palette.bg; }
-
-  // morph
-  autoShapeTimer+=dt/60;
-  if(morphT<1){
-    morphT=Math.min(1, morphT+morphSpeed*dt);
-    morphSpeed=0.022 + (0.045-0.022)*(1-morphT)*0.5;
-    if(morphT>=1){ shapeHold=0; }
-  } else {
-    shapeHold+=dt/60;
-    if(shapeHold>CFG.shapeTime) triggerShapeChange();
+  const vol=updateBeats();
+  checkMouse(mouseX, mouseY);
+  if(animMode===0) Animations.spring(pListFirst);
+  else EffectRotator.getEffect(EffectRotator.lastRandom,'position',pListFirst, vol*800);
+  project();
+  if(!pixelMode) rebuildSort();
+  ctx.fillStyle=background; ctx.fillRect(0,0,W,H);
+  if(pixelMode){
+    ctx.fillStyle='#000000';
+    let p=pListFirst; while(p){ if(p.screenZ>0) ctx.fillRect(p.screen.x, p.screen.y, 1.2, 1.2); p=p.next; }
+  }else{
+    for(let i=0;i<sortArray.length;i++){
+      const p=sortArray[i]; if(p.screenZ<=0) continue;
+      const s = Math.max(0.05, p.screenZ * 0.24);
+      ctx.globalAlpha=0.93;
+      ctx.drawImage(p._bitmap, p.screen.x - s*32, p.screen.y - s*32, s*64, s*64);
+    }
+    ctx.globalAlpha=1;
   }
-
-  // update particles positions with easing
-  const ease=0.065*dt;
-  for(let i=0;i<particles.length;i++){
-    const p=particles[i];
-    const tx = shapeA[i].x*(1-morphT) + shapeB[i].x*morphT;
-    const ty = shapeA[i].y*(1-morphT) + shapeB[i].y*morphT;
-    const tz = shapeA[i].z*(1-morphT) + shapeB[i].z*morphT;
-    p.x += (tx - p.x)*ease;
-    p.y += (ty - p.y)*ease;
-    p.z += (tz - p.z)*ease;
-  }
-
-  // rotation target from mouse (cursor-following like original CameraControls)
-  const nx=(mouseX/W)*2-1, ny=(mouseY/H)*2-1;
-  targetRY = nx * 0.9 * CFG.rotationSpeed;
-  targetRX = -ny * 0.55 * CFG.rotationSpeed;
-  curRY += (targetRY - curRY)*0.04*dt;
-  curRX += (targetRX - curRX)*0.04*dt;
-
-  // subtle auto rotation
-  const time=now*0.00018;
-  const autoRY = Math.sin(time*0.7)*0.08;
-  const autoRX = Math.cos(time*0.5)*0.05;
-  const rotY = curRY + autoRY;
-  const rotX = curRX + autoRX;
-
-  const cosY=Math.cos(rotY), sinY=Math.sin(rotY);
-  const cosX=Math.cos(rotX), sinX=Math.sin(rotX);
-
-  // beat analysis from <audio> analyser
-  let beatScale=1;
-  if(analyser && freqData && !audio.paused){
-    analyser.getByteFrequencyData(freqData);
-    const low = freqData.slice(2,10).reduce((a,b)=>a+b,0)/8/255;
-    const med = freqData.slice(12,40).reduce((a,b)=>a+b,0)/28/255;
-    const hi  = freqData.slice(50,110).reduce((a,b)=>a+b,0)/60/255;
-    const now2=performance.now();
-    if(low>beatLowThresh && now2-lastLowBeat>420){ lastLowBeat=now2; onLowBeat(low); }
-    if(med>beatMedThresh && now2-lastMedBeat>340){ lastMedBeat=now2; onMedBeat(med); }
-    if(hi>beatHiThresh && now2-lastHiBeat>300){ lastHiBeat=now2; onHiBeat(hi); }
-    beatScale = 1 + low*0.08 + med*0.04;
-  }
-
-  // background
-  const grad = ctx.createRadialGradient(W*0.5,H*0.5,0,W*0.5,H*0.5,Math.max(W,H)*0.9);
-  grad.addColorStop(0, lerpColor(bgColor, targetPalette.bg2||palette.bg2, 0.45));
-  grad.addColorStop(1, bgColor);
-  ctx.fillStyle=grad;
-  ctx.fillRect(0,0,W,H);
-
-  // subtle vignette
-  ctx.fillStyle='rgba(0,0,0,0.18)';
-  ctx.fillRect(0,0,W,H);
-
-  // 3D projection
-  const fov = 420;
-  const cx=W/2, cy=H/2;
-
-  // depth sort: compute projected and sort back-to-front for nicer alpha
-  let list=new Array(particles.length);
-  for(let i=0;i<particles.length;i++){
-    const p=particles[i];
-    // rotate Y then X
-    let x=p.x*beatScale, y=p.y*beatScale, z=p.z*beatScale;
-    let x1 = x*cosY - z*sinY;
-    let z1 = x*sinY + z*cosY;
-    let y1 = y*cosX - z1*sinX;
-    let z2 = y*sinX + z1*cosX;
-    // perspective
-    const perspective = fov/(fov+z2+420);
-    const sx = x1*perspective + cx;
-    const sy = y1*perspective + cy;
-    const size = Math.max(0.2, CFG.particleSize * perspective * 1.7);
-    const alpha = Math.max(0, Math.min(1, (perspective*1.2)));
-    // fog based on z
-    const depth = z2;
-    list[i]={sx,sy,size,alpha,depth, x1,y1,z2};
-  }
-  list.sort((a,b)=>a.depth-b.depth);
-
-  // draw dots
-  for(let i=0;i<list.length;i++){
-    const q=list[i];
-    if(q.sy<-60||q.sy>H+60||q.sx<-60||q.sx>W+60) continue;
-    // color per depth / palette mix
-    const t = (q.depth+600)/1200; // -600..600
-    const col = lerpColor(palette.dot, palette.dot2||targetPalette.dot2, (Math.sin(i*0.013)+1)/2*0.6 + 0.2 + t*0.12);
-    ctx.globalAlpha = q.alpha*0.92;
-    ctx.fillStyle = col;
-    // glow
-    if(q.size>1.6){
-      ctx.shadowColor = palette.glow||col;
-      ctx.shadowBlur = q.size*1.4;
-    } else ctx.shadowBlur=0;
-    ctx.beginPath();
-    ctx.arc(q.sx,q.sy,q.size,0,Math.PI*2);
-    ctx.fill();
-  }
-  ctx.shadowBlur=0;
-  ctx.globalAlpha=1;
-
-  // auto idle detection to gently drift mouse
-  idle+=dt;
-  if(idle>600){ mouseX = W/2 + Math.sin(now*0.0003)*W*0.22; mouseY = H/2 + Math.cos(now*0.00022)*H*0.18; }
 }
 requestAnimationFrame(frame);
-
-// Wallpaper Engine integration
-window.wallpaperPropertyListener = {
-  applyUserProperties: function(props){
-    if(props.schemecolor) { CFG.scheme=props.schemecolor.value; pickPalette(CFG.scheme===0?undefined:CFG.scheme-1); paletteLerp=0; }
-    if(props.particlecount) {
-      const v=Math.round(props.particlecount.value);
-      if(v!==CFG.particleCount){ CFG.particleCount=v; initParticles(v); }
+window.wallpaperPropertyListener={
+  applyUserProperties(props){
+    if(props.schemecolor){
+      const v=props.schemecolor.value;
+      if(v===1){currentStyle=STYLES[0]; background=currentStyle.background; assets.setStyle(currentStyle); pixelMode=false; currentViewStyle=0;}
+      else if(v===2){currentStyle=STYLES[1]; background=currentStyle.background; assets.setStyle(currentStyle); pixelMode=false; currentViewStyle=2;}
     }
-    if(props.particlesize) CFG.particleSize=props.particlesize.value;
-    if(props.rotationspeed) CFG.rotationSpeed=props.rotationspeed.value;
-    if(props.shapetime) CFG.shapeTime=props.shapetime.value;
-    if(props.playmusic) { CFG.playMusic=props.playmusic.value; if(CFG.playMusic) tryPlayMusic(); else { audio.pause(); btn.style.display='none'; } }
-    if(props.musicvolume) { CFG.musicVolume=props.musicvolume.value; audio.volume=CFG.musicVolume/100; }
-    if(props.beatreactive) CFG.beatReactive=props.beatreactive.value;
-    if(props.usemicrophone) CFG.useMicrophone=props.usemicrophone.value;
+    if(props.playmusic && !props.playmusic.value) audio.pause();
+    if(props.playmusic && props.playmusic.value) tryPlay();
+    if(props.musicvolume) audio.volume=props.musicvolume.value/100;
   }
 };
-window.addEventListener('mousemove',()=> idle=0);
-document.addEventListener('visibilitychange',()=>{ if(document.hidden) audio.pause(); else if(CFG.playMusic) audio.play().catch(()=>{}); });
 </script>
 </body>
 </html>
