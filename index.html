@@ -101,6 +101,36 @@ const Spiral={
   while(p){ let r=p4; if(useSin) r=Math.sin(t*p7)*p4; p[field].x=Math.sin(t)*r; p[field].y=_y; p[field].z=Math.cos(t)*r; t+=p6; _y+=stepY; p=p.next; }
  }
 };
+const Cylinder={
+ setParticles(field, first, count, radius=110, height=300){
+  const sc=Math.min(W,H)/420; radius*=sc; height*=sc;
+  const cols=Math.ceil(Math.sqrt(count*0.6))||24, rows=Math.ceil(count/cols);
+  let p=first, idx=0;
+  while(p){
+   const col=idx%cols, row=(idx/cols)|0;
+   const ang=col/cols*Math.PI*2, y=-height/2 + row/rows*height;
+   p[field].x=Math.cos(ang)*radius; p[field].y=y; p[field].z=Math.sin(ang)*radius;
+   idx++; p=p.next;
+  }
+ }
+};
+const Torus={
+ setParticles(field, first, count, R=110, r=38){
+  const sc=Math.min(W,H)/420; R*=sc; r*=sc;
+  let p=first;
+  const cols=Math.ceil(Math.sqrt(count* (R/r)*0.5))||44, rows=Math.ceil(count/cols);
+  let idx=0;
+  while(p){
+   const col=idx%cols, row=(idx/cols)|0;
+   const u=col/cols*Math.PI*2, v=row/rows*Math.PI*2;
+   const cu=Math.cos(u), su=Math.sin(u), cv=Math.cos(v), sv=Math.sin(v);
+   p[field].x=(R + r*cv)*cu;
+   p[field].y=r*sv;
+   p[field].z=(R + r*cv)*su;
+   idx++; p=p.next;
+  }
+ }
+};
 const StrangeAttractor={
  setParticles(field, first, a=1.111,b=1.479,c=4.494,d=0.44,e=0.135){
   const sc=Math.min(W,H)/420;
@@ -110,7 +140,7 @@ const StrangeAttractor={
 };
 const EffectRotator={
  lastRandom:1,
- getRandomIndex(){ this.lastRandom=(Math.random()*9+0.5)|0+1; return this.lastRandom; },
+ getRandomIndex(){ this.lastRandom=(Math.random()*12|0)+1; return this.lastRandom; },
  getEffect(idx, field, engine, vol=0){
   const sc=Math.min(W,H)/420;
   const first=engine.pListFirst, cnt=engine.Num_particles;
@@ -120,11 +150,13 @@ const EffectRotator={
    case 3: Spiral.setParticles(field, first, cnt, 120*sc,300*sc,0.01+vol*0.01,0.1+vol*0.01); break;
    case 4: StrangeAttractor.setParticles(field, first, 1.111+vol*0.1,1.479+vol*0.1); break;
    case 5: Spiral.setParticles(field, first, cnt, 120*sc,300*sc,0.03+vol*0.03,0.3); break;
-   case 6: FilledCube.setParticles(field, first, cnt, (80+vol*15)*sc); break;
+   case 6: Cylinder.setParticles(field, first, cnt, 110+vol*12, 300+vol*20); break;
    case 7: Cube.setParticles(field, first, cnt, 100*sc); break;
    case 8: StrangeAttractor.setParticles(field, first, 4.686349188388582+vol*0.01,1.479); break;
    case 9: StrangeAttractor.setParticles(field, first, 2.125+vol*0.01,1.12265625,4.56875,0.6547760900473961,0.13273437500000002); break;
    case 10:StrangeAttractor.setParticles(field, first, 2.125,1.3284374999999997,4.1996875+vol*0.001,0.6547760900473961,0.146796875); break;
+   case 11:Torus.setParticles(field, first, cnt, 110+vol*8, 38+vol*4); break;
+   case 12:Cylinder.setParticles(field, first, cnt, 95+vol*10, 280+vol*15); break;
   }
  }
 };
@@ -278,17 +310,33 @@ function showRandomView(){
  // también randomiza dentro de PetrolPink/BlackYellow ya son los 2 colores originales; para que se note, forzamos repaint
 }
 function toggleAnimmode(){ animMode=(animMode===1?0:1); }
+let audioPower=0; // 0..1 para reacción a audio de la computadora
 function onMedBeat(){
- // FIEL: cada 12 medBeats cambia forma — pero para que se vea animado siempre usamos TARGET (spring) no POSITION (snap)
+ // FIEL + errático: 60% fluido (TARGET spring), 40% bizarro (POSITION snap + impulso)
  if(medBeatsCount%12===0){
   const idx=effects.getRandomIndex();
-  // 80% TARGET para que se vea el morph suave via spring, 20% POSITION para variedad fiel
-  if(Math.random()<0.8) effects.getEffect(idx,'target', _currentView.getParticles());
-  else effects.getEffect(idx,'position', _currentView.getParticles());
+  if(Math.random()<0.6){
+   effects.getEffect(idx,'target', _currentView.getParticles(), audioPower*1.5);
+  } else {
+   // bizarro: snap directo + velocidad aleatoria
+   effects.getEffect(idx,'position', _currentView.getParticles(), audioPower*2 + Math.random());
+   let p=_currentView.getParticles().pListFirst;
+   while(p){ p.speed.x+=(Math.random()-0.5)*10; p.speed.y+=(Math.random()-0.5)*10; p.speed.z+=(Math.random()-0.5)*10; p=p.next; }
+  }
  }
  medBeatsCount++;
 }
-function onLowBeat(){ if(Math.random()<0.1) toggleAnimmode(); if(lowBeatsCount%16===0) showRandomView(); lowBeatsCount++; }
+function onLowBeat(){
+ if(Math.random()<0.1) toggleAnimmode();
+ if(lowBeatsCount%16===0){
+  // 70% fluido (cambio suave), 30% errático (flash instant)
+  if(Math.random()<0.7) showRandomView();
+  else { // bizarro: cambia dos veces rápido
+   showRandomView(); setTimeout(showRandomView, 90);
+  }
+ }
+ lowBeatsCount++;
+}
 function onHiBeat(){ hiBeatsCount++; }
 
 // audio
@@ -302,23 +350,32 @@ btn.addEventListener('click', tryPlay);
 addEventListener('pointerdown',()=>{ if(audio.paused) tryPlay(); },{once:true});
 setTimeout(tryPlay,600);
 
-// Cambios ALEATORIOS fieles + fallback: además de beats, timers independientes para que fondo y figuras cambien solas aleatoriamente como en el original
+// Cambios ALEATORIOS + bizarros: fluido vs errático
 let nextBgChange = Date.now() + 4000 + Math.random()*3000;
 let nextShapeChange = Date.now() + 2500 + Math.random()*2500;
 setInterval(()=>{
  const now=Date.now();
  if(now >= nextBgChange){
-  showRandomView();
+  // 70% fluido, 30% bizarro doble-flash
+  if(Math.random()<0.7) showRandomView();
+  else { showRandomView(); setTimeout(showRandomView, 80+Math.random()*120); }
   nextBgChange = now + 4500 + Math.random()*4000;
  }
  if(now >= nextShapeChange){
-  // cambia figura aleatoria entre TODAS las 9 originales — SIEMPRE sobre TARGET para que el spring anime el morph
   const idx = effects.getRandomIndex();
-  effects.getEffect(idx, 'target', _currentView.getParticles());
-  if(Math.random()<0.2) showRandomView();
+  const isBizarro = Math.random()<0.35;
+  if(isBizarro){
+   // errático: snap + impulso
+   effects.getEffect(idx, 'position', _currentView.getParticles(), audioPower*2 + Math.random());
+   let p=_currentView.getParticles().pListFirst;
+   while(p){ p.speed.x+=(Math.random()-0.5)*12; p.speed.y+=(Math.random()-0.5)*12; p.speed.z+=(Math.random()-0.5)*12; p=p.next; }
+  } else {
+   // fluido: spring suave
+   effects.getEffect(idx, 'target', _currentView.getParticles(), audioPower*1.2);
+  }
+  if(Math.random()<0.15) showRandomView();
   nextShapeChange = now + 2800 + Math.random()*3200;
  }
- // fallback beats si audio bloqueado
  if(audio.paused && now-lastLow>7000){ onLowBeat(); lastLow=now; }
  if(audio.paused && now-lastMed>4500){ onMedBeat(); lastMed=now; }
 }, 400);
@@ -329,15 +386,16 @@ addEventListener('mousemove',e=>{ mouseX=e.clientX; mouseY=e.clientY; bitmaps.pa
 // Click deshabilitado: antes cambiaba figura al click, ahora todo es aleatorio/beats como original. Si quieres debug, descomenta:
 // canvas.addEventListener('click',()=> effects.getEffect(effects.getRandomIndex(),'position', _currentView.getParticles()));
 
-// onEnterFrame exact 60fps — FIEL 1:1 a SaturatedDreams.as:205
+// onEnterFrame exact 60fps — FIEL 1:1 a SaturatedDreams.as:205 + reacción a audio de la computadora
 function onEnterFrame(){
  camcontrols.checkMouse(bitmaps.particles);
+ _updateAudioPowerFromAnalyser();
  if(animMode===0){
   Animations.spring(_currentView.getParticles().pListFirst);
  } else {
   const vol=sampleVoulme();
+  audioPower=Math.max(audioPower, vol);
   effects.getEffect(effects.lastRandom,'position', _currentView.getParticles(), vol);
-  Animations.spring(_currentView.getParticles().pListFirst);
  }
  _currentView.step();
 }
@@ -362,17 +420,19 @@ function frame(){
   ctx.fillStyle='#000000';
   let p=_currentView.getParticles().pListFirst;
   while(p){ if(p.screenZ>0) ctx.fillRect(p.screen.x, p.screen.y, 1.2, 1.2); p=p.next; }
- } else {
-  // ParticlesEngine render exact beginBitmapFill
-  const arr=_currentView.getParticles().sortArray;
-  for(let i=0;i<arr.length;i++){
-   const p=arr[i]; if(p.screenZ<=0) continue;
-   const s=Math.max(0.04, p.screenZ*0.22);
-   ctx.globalAlpha=0.95;
-   ctx.drawImage(p._bitmap, p.screen.x - s*32, p.screen.y - s*32, s*64, s*64);
+  } else {
+   // ParticlesEngine render exact beginBitmapFill + reacción a audio (pulso)
+   const arr=_currentView.getParticles().sortArray;
+   const pulse=1 + audioPower*0.55;
+   for(let i=0;i<arr.length;i++){
+    const p=arr[i]; if(p.screenZ<=0) continue;
+    const s=Math.max(0.04, p.screenZ*0.22*pulse);
+    ctx.globalAlpha=0.95;
+    ctx.drawImage(p._bitmap, p.screen.x - s*32, p.screen.y - s*32, s*64, s*64);
+   }
+   ctx.globalAlpha=1;
+   audioPower*=0.92; // decay
   }
-  ctx.globalAlpha=1;
- }
 }
 requestAnimationFrame(frame);
 
@@ -391,11 +451,23 @@ window.wallpaperPropertyListener={
 };
 if(window.wallpaperRegisterAudioListener){
  window.wallpaperRegisterAudioListener(function(arr){
+  // reacción a audio de la computadora (sistema) — promedio para audioPower
+  let sum=0; for(let v of arr) sum+=v; audioPower=Math.min(1, sum/arr.length*1.6);
   const low=Math.max(...arr.slice(0,5)), med=Math.max(...arr.slice(5,16));
   const now=Date.now();
   if(low>0.45 && now-lastLow>400){ lastLow=now; onLowBeat(); }
   if(med>0.35 && now-lastMed>380){ lastMed=now; onMedBeat(); }
+  // también dispara hiBeat
+  const hi=Math.max(...arr.slice(16,32));
+  if(hi>0.38 && now-lastHi>320){ lastHi=now; onHiBeat(); }
  });
+}
+// para navegador, audioPower desde WebAudio
+function _updateAudioPowerFromAnalyser(){
+ if(!analyser||audio.paused) return;
+ analyser.getByteFrequencyData(dataArray);
+ let sum=0; for(let v of dataArray) sum+=v/255;
+ audioPower=Math.min(1, sum/dataArray.length*1.7);
 }
 </script>
 </body>
